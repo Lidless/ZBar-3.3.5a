@@ -1,0 +1,18 @@
+## Interface: 30300
+## Title: ZBar
+## Notes: Non-invasive rearranging of the default Blizzard action bars.
+## Author: Lidless
+## Version: 0.9.1
+## SavedVariablesPerCharacter: ZBarCharDB
+
+Core.lua
+Bars.lua
+Groups.lua
+Blocks.lua
+CustomBars.lua
+Layout.lua
+Mover.lua
+Toolbar.lua
+Roles.lua
+Minimap.lua
+Options.lua
