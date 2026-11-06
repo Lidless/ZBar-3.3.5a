@@ -385,3 +385,116 @@ function Roles:OnReady()
         self:Switch(role)
     end
 end
+
+------------------------------------------------------------------------
+-- Temporary investigation (feature/role-talents): /zbar coascan
+-- Saves the structure of the Conquest of Azeroth talent window and the
+-- talent related globals into ZBarCharDB.coaScan (written on /reload).
+------------------------------------------------------------------------
+local function IsFrameObj(v)
+    return type(v) == "table" and type(rawget(v, 0)) == "userdata" and type(v.GetObjectType) == "function"
+end
+
+function Roles:CoAScan()
+    local out = { at = date("%Y-%m-%d %H:%M:%S"), globals = {}, frames = {}, api = {} }
+
+    -- globals named like CoA* or *Talent* (functions, tables, frames)
+    local n = 0
+    for name, v in pairs(_G) do
+        if type(name) == "string" and (name:find("CoA") or (name:find("[Tt]alent") and name ~= name:upper())) then
+            local t = type(v)
+            local entry
+            if t == "function" then
+                entry = "function"
+            elseif IsFrameObj(v) then
+                local ok, ot = pcall(v.GetObjectType, v)
+                entry = "frame:" .. tostring(ok and ot)
+            elseif t == "table" then
+                local keys, c = {}, 0
+                for k, vv in pairs(v) do
+                    c = c + 1
+                    if c <= 30 then keys[#keys + 1] = tostring(k) .. ":" .. type(vv) end
+                end
+                entry = "table(" .. c .. ") " .. table.concat(keys, ", ")
+            end
+            if entry then
+                n = n + 1
+                if n <= 800 then out.globals[name] = entry end
+            end
+        end
+    end
+
+    -- the talent window tree
+    local count = 0
+    local function Dump(f, path, depth)
+        if count > 1500 or depth > 9 then return end
+        count = count + 1
+        local ok = pcall(function()
+            local _, ot = pcall(f.GetObjectType, f)
+            local line = path .. " | " .. tostring(f:GetName()) .. " | " .. tostring(ot)
+                .. (f:IsShown() and "" or " (hidden)")
+            if f.GetText then
+                local ok2, txt = pcall(f.GetText, f)
+                if ok2 and type(txt) == "string" and txt ~= "" then line = line .. " | text=" .. txt:sub(1, 120) end
+            end
+            if f.HasScript and f:HasScript("OnClick") and f:GetScript("OnClick") then line = line .. " | OnClick" end
+            local fields = {}
+            for k, v in pairs(f) do
+                if type(k) == "string" then
+                    if type(v) == "function" then fields[#fields + 1] = k .. ":fn"
+                    elseif IsFrameObj(v) then fields[#fields + 1] = k .. ":frame"
+                    elseif type(v) ~= "table" then fields[#fields + 1] = k .. "=" .. tostring(v):sub(1, 40) end
+                end
+            end
+            if #fields > 0 then
+                table.sort(fields)
+                line = line .. " | fields: " .. table.concat(fields, ", ")
+            end
+            table.insert(out.frames, line)
+            if f.GetRegions then
+                local regions = { f:GetRegions() }
+                for i, r in ipairs(regions) do
+                    if r.GetObjectType and r:GetObjectType() == "FontString" then
+                        local t = r:GetText()
+                        if t and t ~= "" then
+                            count = count + 1
+                            table.insert(out.frames, path .. ".r" .. i .. " | FontString | " .. t:sub(1, 120))
+                        end
+                    end
+                end
+            end
+        end)
+        if not ok then table.insert(out.frames, path .. " | (error reading)") end
+        if f.GetChildren then
+            local kids = { f:GetChildren() }
+            for i, c in ipairs(kids) do Dump(c, path .. "." .. i, depth + 1) end
+        end
+    end
+    for _, root in ipairs({ "CoATalentFrame", "CoATalentFrameBuildTransfer" }) do
+        local f = _G[root]
+        if f then Dump(f, root, 0) else table.insert(out.frames, root .. " | not found") end
+    end
+
+    -- the standard talent API: does Grimfal fill it?
+    local api = out.api
+    api.groups = GetNumTalentGroups and GetNumTalentGroups()
+    api.active = GetActiveTalentGroup and GetActiveTalentGroup()
+    api.unspent = GetUnspentTalentPoints and GetUnspentTalentPoints()
+    api.tabs = {}
+    local tabs = GetNumTalentTabs and GetNumTalentTabs() or 0
+    for t = 1, tabs do
+        local name, _, spent = GetTalentTabInfo(t)
+        local num = GetNumTalents(t) or 0
+        local spentList = {}
+        for i = 1, num do
+            local tn, _, tier, col, rank, maxRank = GetTalentInfo(t, i)
+            if rank and rank > 0 then spentList[#spentList + 1] = tostring(tn) .. " " .. rank .. "/" .. tostring(maxRank) end
+        end
+        api.tabs[t] = tostring(name) .. " | spent=" .. tostring(spent) .. " | talents=" .. num
+            .. " | ranked: " .. table.concat(spentList, "; ")
+    end
+
+    ns.db.coaScan = out
+    ns.Print(string.format("CoA scan saved: %d globals, %d window lines, %d talent tabs. Type /reload to write it to disk.",
+        n, #out.frames, tabs))
+end
