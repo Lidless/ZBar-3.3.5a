@@ -31,7 +31,7 @@ Azeroth and Classless realms), works on any 3.3.5a client.
 - Assign in *Mode: Modifiers* (`/zbar layers`): hold Ctrl or Shift and drop a spell, macro or item on a button; right-click a button for pet actions or to clear.
 - While Ctrl or Shift is held, the buttons show what that layer will do.
 - Alt is not touched: it stays the game's self-cast key.
-- Windows tip: pressing Shift 5 times in a row makes Windows ask about **Sticky keys**, which can pull you out of the game. In *Settings > Accessibility > Keyboard* turn off everything under Sticky keys - the keyboard shortcut and "Lock shortcut keys when pressed twice in a row" too (that one would make Shift stay pressed) - and the **Filter keys** keyboard shortcut. Or use only the Ctrl layer. ZBar shows this tip the first time you turn the Shift layer on.
+- Windows tip: pressing Shift 5 times in a row makes Windows ask about **Sticky keys**, which can pull you out of the game. In *Settings > Accessibility > Keyboard* turn off **every** option under Sticky keys, not just the main switch - Windows can still pop up with Sticky keys off if an option below it is on. That includes the keyboard shortcut and "Lock shortcut keys when pressed twice in a row" (that one would make Shift stay pressed). Also turn off the **Filter keys** keyboard shortcut. Or use only the Ctrl layer. ZBar shows this tip the first time you turn the Shift layer on.
 - Saved per character and in each role profile.
 
 **Blocks** (move as one unit, keep their own inner layout)
