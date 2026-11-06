@@ -510,11 +510,23 @@ local function SetEntryTooltip(e)
     end
 end
 
+-- the same place the game puts action button tooltips (the default tooltip
+-- position, or next to the button when "Enhanced Tooltips" is off)
+function Mod:AnchorTooltip(owner)
+    if GetCVar("UberTooltips") == "1" and GameTooltip_SetDefaultAnchor then
+        GameTooltip_SetDefaultAnchor(GameTooltip, owner)
+    else
+        local parent = owner:GetParent()
+        local left = parent == MultiBarBottomRight or parent == MultiBarRight or parent == MultiBarLeft
+        GameTooltip:SetOwner(owner, left and "ANCHOR_LEFT" or "ANCHOR_RIGHT")
+    end
+end
+
 -- returns true if it showed a layer tooltip
 function Mod:LayerTooltip(owner, name)
     local e, layer = self:TooltipEntry(name)
     if not e then return false end
-    if not GameTooltip:IsOwned(owner) then GameTooltip:SetOwner(owner, "ANCHOR_RIGHT") end
+    self:AnchorTooltip(owner)
     GameTooltip:ClearLines()
     SetEntryTooltip(e)
     GameTooltip:AddLine(self.LAYERS[layer].label .. " layer (ZBar)", 0.2, 1, 0.6)
@@ -690,8 +702,8 @@ local function Proxy(name)
     end)
     p.zbarName = name
     p:SetScript("OnEnter", function(self)
-        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
         if Mod:LayerTooltip(self, name) then return end
+        Mod:AnchorTooltip(self)
         GameTooltip:SetText(info.label .. "  |cff888888(empty)|r")
         Mod:LayerLines(name)
         GameTooltip:Show()
