@@ -112,9 +112,16 @@ end
 ------------------------------------------------------------------------
 -- Secure attributes on the buttons
 ------------------------------------------------------------------------
+local proxies = {} -- button name -> stand-in button (see "Stand-ins" below)
+
 function Mod:ApplyButton(name)
     local btn = _G[name]
     if not btn or not ns.db then return end
+    self:SetLayerAttributes(btn, name)
+    if proxies[name] then self:SetLayerAttributes(proxies[name], name) end
+end
+
+function Mod:SetLayerAttributes(btn, name)
     local m = DB().mods[name]
     for _, layer in ipairs(self.ORDER) do
         local p = self.LAYERS[layer].prefix
@@ -142,7 +149,7 @@ function Mod:ApplyAll()
     if not ns.db then return end
     ns.RunOOC("modifiers", function()
         for name in pairs(ns.Bars.info) do Mod:ApplyButton(name) end
-        Mod:UpdateIcons()
+        Mod:UpdateProxies()
     end)
 end
 
@@ -451,7 +458,17 @@ function Mod:UpdateIcons()
         local e = layer and self:Get(name, layer)
         local holder = icons[name]
         local icon = e and self:Icon(e)
-        if icon or (layer and setup) then
+        local proxy = proxies[name]
+        if proxy and proxy:IsShown() then
+            -- the stand-in shows the layer icon itself
+            if icon then
+                proxy.icon:SetTexture(icon)
+                proxy.icon:Show()
+            else
+                proxy.icon:Hide()
+            end
+            if holder then holder:Hide() end
+        elseif icon or (layer and setup) then
             local btn = _G[name]
             -- a frame of its own next to the button (same parent), not a texture
             -- on the button: the game hides buttons whose base slot is empty,
@@ -481,12 +498,143 @@ function Mod:UpdateIcons()
     end
 end
 
+------------------------------------------------------------------------
+-- Stand-ins: the game hides an action button whose base slot is empty
+-- (unless the grid is shown), so it could not be clicked even if it has a
+-- Ctrl / Shift action. Such a button gets a secure stand-in in its place:
+-- empty slot frame + key text, Ctrl / Shift click does the layer action,
+-- and a spell dropped on it goes to the real button's base slot.
+-- Its key binding keeps working on the hidden real button anyway.
+------------------------------------------------------------------------
+local BINDING = {
+    ActionButton = "ACTIONBUTTON",
+    MultiBarBottomLeftButton = "MULTIACTIONBAR1BUTTON",
+    MultiBarBottomRightButton = "MULTIACTIONBAR2BUTTON",
+    MultiBarRightButton = "MULTIACTIONBAR3BUTTON",
+    MultiBarLeftButton = "MULTIACTIONBAR4BUTTON",
+}
+
+local function SlotOf(btn)
+    if btn.action then return btn.action end
+    if ActionButton_CalculateAction then return ActionButton_CalculateAction(btn, "LeftButton") end
+end
+
+local function HasLayerAction(name)
+    for _, layer in ipairs(Mod.ORDER) do
+        if Mod:IsOn(layer) and Mod:Get(name, layer) then return true end
+    end
+end
+
+local function KeyText(info)
+    local cmd = BINDING[info.bar.prefix]
+    local key = cmd and GetBindingKey(cmd .. info.index)
+    return key and GetBindingText(key, "KEY_", 1) or ""
+end
+
+local function Proxy(name)
+    local p = proxies[name]
+    if p then return p end
+    local info = ns.Bars.info[name]
+    local btn = info.btn
+    p = CreateFrame("Button", "ZBarStandIn" .. name, btn:GetParent(), "SecureActionButtonTemplate")
+    p:RegisterForClicks("AnyUp")
+
+    p.slotArt = p:CreateTexture(nil, "BACKGROUND")
+    p.slotArt:SetTexture("Interface\\Buttons\\UI-Quickslot2")
+    p.slotArt:SetSize(66, 66)
+    p.slotArt:SetPoint("CENTER", 0, -1)
+
+    p.icon = p:CreateTexture(nil, "ARTWORK")
+    p.icon:SetPoint("TOPLEFT", 2, -2)
+    p.icon:SetPoint("BOTTOMRIGHT", -2, 2)
+    p.icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
+    p.icon:Hide()
+
+    p.hotkey = p:CreateFontString(nil, "OVERLAY", "NumberFontNormalSmallGray")
+    p.hotkey:SetPoint("TOPRIGHT", -2, -2)
+    p.hotkey:SetJustifyH("RIGHT")
+
+    p:SetHighlightTexture("Interface\\Buttons\\ButtonHilight-Square", "ADD")
+
+    local function PlaceBase()
+        local slot = SlotOf(btn)
+        if slot and GetCursorInfo() and not InCombatLockdown() then PlaceAction(slot) end
+    end
+    p:SetScript("OnReceiveDrag", PlaceBase)
+    p:HookScript("OnMouseUp", function(_, mouse)
+        if mouse == "LeftButton" and GetCursorInfo() then PlaceBase() end
+    end)
+    p:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText(info.label .. "  |cff888888(empty)|r")
+        Mod:LayerLines(name)
+        GameTooltip:Show()
+    end)
+    p:SetScript("OnLeave", function() GameTooltip:Hide() end)
+
+    proxies[name] = p
+    Mod:SetLayerAttributes(p, name)
+    return p
+end
+
+function Mod:UpdateProxies()
+    if not ns.db then return end
+    if InCombatLockdown() then
+        self.proxyPending = true -- showing / hiding secure buttons waits for combat to end
+        self:UpdateIcons()
+        return
+    end
+    self.proxyPending = nil
+    for name, info in pairs(ns.Bars.info) do
+        local btn = info.btn
+        local need = info.managed and not ns.unlocked and not btn:IsShown()
+            and btn:GetParent() ~= ns.Groups.hiddenParent and HasLayerAction(name)
+        local p = proxies[name]
+        if need then
+            p = Proxy(name)
+            if p:GetParent() ~= btn:GetParent() then p:SetParent(btn:GetParent()) end
+            p:ClearAllPoints()
+            p:SetAllPoints(btn)
+            p:SetFrameLevel(btn:GetFrameLevel() + 1)
+            p.hotkey:SetText(KeyText(info))
+            p:Show()
+        elseif p and p:IsShown() then
+            p:Hide()
+        end
+    end
+    self:UpdateIcons()
+end
+
+local pendingProxy = false
+local function QueueProxies()
+    if pendingProxy then return end
+    pendingProxy = true
+    -- after the game has updated its own buttons for the same event
+    ns.After(0.1, function()
+        pendingProxy = false
+        Mod:UpdateProxies()
+    end)
+end
+
 local ev = CreateFrame("Frame")
 ev:RegisterEvent("MODIFIER_STATE_CHANGED")
 ev:RegisterEvent("PET_BAR_UPDATE")
+ev:RegisterEvent("ACTIONBAR_SLOT_CHANGED")
+ev:RegisterEvent("ACTIONBAR_SHOWGRID")
+ev:RegisterEvent("ACTIONBAR_HIDEGRID")
+ev:RegisterEvent("ACTIONBAR_PAGE_CHANGED")
+ev:RegisterEvent("UPDATE_BONUS_ACTIONBAR")
+ev:RegisterEvent("UPDATE_BINDINGS")
+ev:RegisterEvent("PLAYER_REGEN_ENABLED")
 ev:SetScript("OnEvent", function(_, event)
     if not ns.ready then return end
-    Mod:UpdateIcons()
+    if event == "MODIFIER_STATE_CHANGED" or event == "PET_BAR_UPDATE" then
+        Mod:UpdateIcons()
+    elseif event == "PLAYER_REGEN_ENABLED" then
+        if Mod.proxyPending then QueueProxies() end
+    else
+        QueueProxies()
+    end
 end)
 
 ------------------------------------------------------------------------
