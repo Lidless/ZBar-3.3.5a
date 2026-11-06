@@ -469,6 +469,108 @@ function Mod:LayerLines(name)
 end
 
 ------------------------------------------------------------------------
+-- While Ctrl or Shift is held: the button's tooltip shows the layer action
+-- (the game would show the base action, or nothing on an empty slot)
+------------------------------------------------------------------------
+-- the layer entry the tooltip of this button should show now, if any
+function Mod:TooltipEntry(name)
+    if not ns.db or ns.unlocked or not name then return nil end
+    local layer = HeldLayer()
+    if not layer or not self:IsOn(layer) then return nil end
+    return self:Get(name, layer), layer
+end
+
+-- fills GameTooltip (already owned by the button) with the entry
+local function SetEntryTooltip(e)
+    if e.t == "spell" then
+        local idx = FindSpellIndex(e.name)
+        if idx then GameTooltip:SetSpell(idx, BOOKTYPE_SPELL) return end
+        GameTooltip:SetText(e.name)
+        GameTooltip:AddLine("Not known by this character", 1, 0.2, 0.2)
+    elseif e.t == "macro" then
+        local idx = GetMacroIndexByName(e.name)
+        local spell = idx and idx > 0 and GetMacroSpell and GetMacroSpell(idx)
+        local _, itemLink = nil, nil
+        if idx and idx > 0 and GetMacroItem then _, itemLink = GetMacroItem(idx) end
+        local sidx = spell and FindSpellIndex(spell)
+        if sidx then
+            GameTooltip:SetSpell(sidx, BOOKTYPE_SPELL)
+        elseif itemLink then
+            GameTooltip:SetHyperlink(itemLink)
+        else
+            GameTooltip:SetText(e.name)
+        end
+        GameTooltip:AddLine("Macro: " .. e.name, 0.8, 0.8, 0.8)
+    elseif e.t == "item" then
+        GameTooltip:SetHyperlink("item:" .. e.id)
+    elseif e.t == "pet" then
+        if not (GetPetActionInfo and GetPetActionInfo(e.index) and GameTooltip:SetPetAction(e.index)) then
+            GameTooltip:SetText(Mod:Describe(e))
+        end
+    end
+end
+
+-- the same place the game puts action button tooltips (the default tooltip
+-- position, or next to the button when "Enhanced Tooltips" is off)
+function Mod:AnchorTooltip(owner)
+    if GetCVar("UberTooltips") == "1" and GameTooltip_SetDefaultAnchor then
+        GameTooltip_SetDefaultAnchor(GameTooltip, owner)
+    else
+        local parent = owner:GetParent()
+        local left = parent == MultiBarBottomRight or parent == MultiBarRight or parent == MultiBarLeft
+        GameTooltip:SetOwner(owner, left and "ANCHOR_LEFT" or "ANCHOR_RIGHT")
+    end
+end
+
+-- returns true if it showed a layer tooltip
+function Mod:LayerTooltip(owner, name)
+    local e, layer = self:TooltipEntry(name)
+    if not e then return false end
+    self:AnchorTooltip(owner)
+    GameTooltip:ClearLines()
+    SetEntryTooltip(e)
+    GameTooltip:AddLine(self.LAYERS[layer].label .. " layer (ZBar)", 0.2, 1, 0.6)
+    GameTooltip:Show()
+    return true
+end
+
+local function ButtonName(frame)
+    if not frame then return nil end
+    if frame.zbarName then return frame.zbarName end
+    local n = frame.GetName and frame:GetName()
+    return n and ns.Bars.info[n] and n or nil
+end
+
+-- the game calls this on enter and again every moment while the tooltip is up
+if type(ActionButton_SetTooltip) == "function" then
+    hooksecurefunc("ActionButton_SetTooltip", function(self)
+        local name = ButtonName(self)
+        if name then Mod:LayerTooltip(self, name) end
+    end)
+end
+
+-- Ctrl / Shift pressed or released while the mouse is on a button: redo its tooltip
+function Mod:RefreshTooltip()
+    local owner = GameTooltip:IsShown() and GameTooltip:GetOwner()
+    local name = ButtonName(owner)
+    if not name then return end
+    if owner.zbarName then
+        local onEnter = owner:GetScript("OnEnter")
+        if onEnter then onEnter(owner) end
+    elseif not self:LayerTooltip(owner, name) then
+        -- back to the base action (set here, not through the game's own
+        -- function: that one writes to the secure button)
+        local slot = Mod.SlotOf(owner)
+        if slot and HasAction(slot) then
+            GameTooltip:SetAction(slot)
+            GameTooltip:Show()
+        else
+            GameTooltip:Hide()
+        end
+    end
+end
+
+------------------------------------------------------------------------
 -- While Ctrl or Shift is held: show that layer's icons on the buttons
 ------------------------------------------------------------------------
 local icons = {}
@@ -548,6 +650,7 @@ local function SlotOf(btn)
     if btn.action then return btn.action end
     if ActionButton_CalculateAction then return ActionButton_CalculateAction(btn, "LeftButton") end
 end
+Mod.SlotOf = SlotOf
 
 local function HasLayerAction(name)
     for _, layer in ipairs(Mod.ORDER) do
@@ -597,8 +700,10 @@ local function Proxy(name)
     p:HookScript("OnMouseUp", function(_, mouse)
         if mouse == "LeftButton" and GetCursorInfo() then PlaceBase() end
     end)
+    p.zbarName = name
     p:SetScript("OnEnter", function(self)
-        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        if Mod:LayerTooltip(self, name) then return end
+        Mod:AnchorTooltip(self)
         GameTooltip:SetText(info.label .. "  |cff888888(empty)|r")
         Mod:LayerLines(name)
         GameTooltip:Show()
@@ -661,7 +766,10 @@ ev:RegisterEvent("UPDATE_BINDINGS")
 ev:RegisterEvent("PLAYER_REGEN_ENABLED")
 ev:SetScript("OnEvent", function(_, event)
     if not ns.ready then return end
-    if event == "MODIFIER_STATE_CHANGED" or event == "PET_BAR_UPDATE" then
+    if event == "MODIFIER_STATE_CHANGED" then
+        Mod:UpdateIcons()
+        Mod:RefreshTooltip()
+    elseif event == "PET_BAR_UPDATE" then
         Mod:UpdateIcons()
     elseif event == "PLAYER_REGEN_ENABLED" then
         if Mod.proxyPending then QueueProxies() end
