@@ -74,7 +74,7 @@ end)
 -- the second line sits in the gap below the row
 local undoNote = panel:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
 undoNote:SetPoint("TOPLEFT", undoButton, "BOTTOMRIGHT", 10, -1)
-undoNote:SetText("After a role switch: layout only - bar contents and gear stay. Switch roles back for those.")
+undoNote:SetText("After a role switch: layout only - bar contents, Ctrl / Shift layers and gear stay. Switch roles back for those.")
 y = y - 12 -- room for the note line
 Row("Factory Reset", "Put every bar back to its Blizzard position (reloads the UI).", function()
     StaticPopup_Show("ZBAR_FACTORY_RESET")
@@ -87,7 +87,7 @@ local savedText = Label("", 16, y - 2, "GameFontDisableSmall")
 ------------------------------------------------------------------------
 local ry = y - 30
 Label("Role Profiles", 16, ry, "GameFontNormal")
-Label("Each role keeps its own bar positions, bar contents and gear set (this character only).", 16, ry - 18)
+Label("Each role keeps its own bar positions, bar contents, Ctrl / Shift layers and gear set (this character only).", 16, ry - 18)
 local currentText = Label("", 16, ry - 34, "GameFontHighlight")
 
 local roleButtons, roleStatus, gearDrops = {}, {}, {}

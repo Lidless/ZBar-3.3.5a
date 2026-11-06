@@ -285,7 +285,7 @@ function Roles:Switch(role, fromSpec)
     end
 
     ns.Layout:PushUndo(nil, nil, "Note: this undid a role switch - only the bar layout went back, "
-        .. "the bar contents and gear did not. Switch back to the previous role to load those.")
+        .. "the bar contents, Ctrl / Shift layers and gear did not. Switch back to the previous role to load those.")
     local layout = ns.DeepCopy(r.layout)
     ns.Blocks:Merge(layout, ns.db.layout)
     ns.db.layout = layout
