@@ -55,7 +55,7 @@ Azeroth and Classless realms), works on any 3.3.5a client.
 - **Threat Plates link**: if the reworked Threat Plates with the Tank/DPS/Healer selector is installed, it is the boss - switching role there switches ZBar too, and the other way round.
 
 **Minimap button** (can be hidden in the options)
-- Left click: DPS. Middle click: Tank. Right click: Healer. Alt+right click: options. Shift+left click: unlock / lock. Drag: move.
+- Left click: DPS. Middle click: Tank. Right click: Healer. Alt+right click: options. Drag: move. (Unlocking the bars: `/zbar` or the options.)
 
 ## Commands
 

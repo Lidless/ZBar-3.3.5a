@@ -3,8 +3,9 @@
 --   Middle click     : Tank role
 --   Right click      : Healer role
 --   Alt+right click  : open the ZBar options
---   Shift+left click : unlock / lock the bars
 --   Drag             : move the button around the minimap
+-- (no unlock here on purpose: a stray click would fill the screen with move
+-- handles; unlocking stays in /zbar and the options)
 -- (one button per role: no stepping through a role you don't want, which
 -- matters when roles also change talents)
 -- The icon shows the current role. It can be hidden in the options
@@ -64,7 +65,6 @@ local function ShowTooltip(self)
     GameTooltip:AddLine("|cffeda55fMiddle click:|r Tank", 0.8, 0.8, 0.8)
     GameTooltip:AddLine("|cffeda55fRight click:|r Healer", 0.8, 0.8, 0.8)
     GameTooltip:AddLine("|cffeda55fAlt+right click:|r ZBar options", 0.8, 0.8, 0.8)
-    GameTooltip:AddLine("|cffeda55fShift+left click:|r unlock / lock the bars", 0.8, 0.8, 0.8)
     GameTooltip:AddLine("|cffeda55fDrag:|r move this button", 0.8, 0.8, 0.8)
     GameTooltip:Show()
 end
@@ -126,8 +126,6 @@ function MM:Create()
         if mouse == "RightButton" and IsAltKeyDown() then
             InterfaceOptionsFrame_OpenToCategory(ns.OptionsPanel)
             InterfaceOptionsFrame_OpenToCategory(ns.OptionsPanel)
-        elseif mouse == "LeftButton" and IsShiftKeyDown() then
-            ns.Mover:Toggle()
         else
             local role = CLICK_ROLE[mouse]
             if not role then return end
