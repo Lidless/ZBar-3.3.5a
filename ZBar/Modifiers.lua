@@ -69,10 +69,17 @@ function Mod:Describe(e)
     return "?"
 end
 
--- live icon if the game can give one, else the icon saved when it was assigned
+local UNKNOWN_ICON = "Interface\\Icons\\INV_Misc_QuestionMark"
+
+-- live icon if the game can give one, else the icon saved when it was
+-- assigned, else a question mark (a layer action must never be invisible)
 function Mod:Icon(e)
     if not e then return nil end
-    if e.t == "spell" then return GetSpellTexture(e.name) or e.icon end
+    return self:RawIcon(e) or UNKNOWN_ICON
+end
+
+function Mod:RawIcon(e)
+    if e.t == "spell" then return GetSpellTexture(e.name) or (select(3, GetSpellInfo(e.name))) or e.icon end
     if e.t == "macro" then
         local idx = GetMacroIndexByName(e.name)
         if idx and idx > 0 then return (select(2, GetMacroInfo(idx))) or e.icon end
