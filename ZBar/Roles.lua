@@ -127,10 +127,22 @@ function Roles:CaptureActions()
     return actions
 end
 
--- returns the names of the actions that could not be placed
+-- action slot -> readable place ("Bottom Left Bar button 3")
+local PAGE_NAMES = {
+    "Main Bar", "Main Bar (page 2)", "Right Bar", "Right Bar 2", "Bottom Right Bar", "Bottom Left Bar",
+}
+local function SlotLabel(slot)
+    local page, i = math.floor((slot - 1) / 12) + 1, (slot - 1) % 12 + 1
+    local bar = PAGE_NAMES[page] or ("Stance / form page " .. (page - 6))
+    return bar .. " button " .. i
+end
+
+-- returns the names of the actions that could not be placed, and the
+-- macros that were not found (one line each in chat: the user may have
+-- deleted them on purpose, so they are not recreated)
 function Roles:LoadActions(actions)
     local book = ScanSpellbook()
-    local missing, seen = {}, {}
+    local missing, seen, lostMacros = {}, {}, {}
     ClearCursor()
     for slot = 1, NUM_SLOTS do
         local want = actions[slot]
@@ -144,6 +156,9 @@ function Roles:LoadActions(actions)
                 if Pick(want, book) then
                     PlaceAction(slot)
                     ClearCursor()
+                elseif want.t == "macro" then
+                    table.insert(lostMacros, string.format("%s: macro \"%s\" not found - maybe it was deleted. Slot left unchanged.",
+                        SlotLabel(slot), want.name))
                 else
                     local n = want.name or tostring(want.id)
                     if not seen[n] then
@@ -155,7 +170,7 @@ function Roles:LoadActions(actions)
         end
     end
     ClearCursor()
-    return missing
+    return missing, lostMacros
 end
 
 ------------------------------------------------------------------------
@@ -277,12 +292,13 @@ function Roles:Switch(role, fromSpec)
     ns.Layout:Apply()
 
     if r.mods and ns.Modifiers then ns.Modifiers:Load(r.mods) end
-    local missing = self:LoadActions(r.actions)
+    local missing, lostMacros = self:LoadActions(r.actions)
     self:EquipSet(r.gear)
     ns.Print("Switched to " .. role .. ".")
     if #missing > 0 then
         ns.Print("Not available, slot left unchanged: " .. table.concat(missing, ", "))
     end
+    for _, line in ipairs(lostMacros) do ns.Print(line) end
     Refresh()
 end
 
