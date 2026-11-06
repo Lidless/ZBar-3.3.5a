@@ -494,6 +494,46 @@ function Roles:CoAScan()
             .. " | ranked: " .. table.concat(spentList, "; ")
     end
 
+    -- read-only CoA functions and the CoA data table (nothing that changes talents)
+    local function Ser(v, depth, budget)
+        budget.n = budget.n - 1
+        if budget.n < 0 then return "..." end
+        local t = type(v)
+        if t ~= "table" then return t == "string" and ("\"" .. v:sub(1, 200) .. "\"") or tostring(v) end
+        if IsFrameObj(v) then return "<frame " .. tostring(v:GetName()) .. ">" end
+        if depth <= 0 then
+            local c = 0
+            for _ in pairs(v) do c = c + 1 end
+            return "{" .. c .. " keys}"
+        end
+        local parts, c = {}, 0
+        for k, vv in pairs(v) do
+            c = c + 1
+            if c > 25 then parts[#parts + 1] = "..." break end
+            parts[#parts + 1] = tostring(k) .. "=" .. Ser(vv, depth - 1, budget)
+        end
+        return "{" .. table.concat(parts, ", ") .. "}"
+    end
+    out.calls = {}
+    for _, fn in ipairs({ "IsCoAEnabled", "Ex_GetCoATalentState", "Ex_GetCoATalentRevision",
+                          "Ex_GetCoATalentCatalog", "Ex_GetCoAClassInfo" }) do
+        local f = _G[fn]
+        if type(f) == "function" then
+            local res = { pcall(f) }
+            local parts = {}
+            for i = 2, #res do parts[#parts + 1] = Ser(res[i], 3, { n = 400 }) end
+            out.calls[fn] = (res[1] and "ok: " or "error: ") .. table.concat(parts, " || ")
+        else
+            out.calls[fn] = "missing"
+        end
+    end
+    out.coa = {}
+    if type(_G.CoA) == "table" then
+        for k, v in pairs(_G.CoA) do
+            out.coa[tostring(k)] = Ser(v, 2, { n = 150 })
+        end
+    end
+
     ns.db.coaScan = out
     ns.Print(string.format("CoA scan saved: %d globals, %d window lines, %d talent tabs. Type /reload to write it to disk.",
         n, #out.frames, tabs))
