@@ -333,13 +333,13 @@ end
 
 local watcher = CreateFrame("Frame")
 
--- done(ok) is called when the server confirmed the build, or on failure
+-- done(ok, reason) is called when the server confirmed the build, or on failure
+-- (reason: "notready" or "timeout"; the caller prints the message)
 function Talents:Apply(t, done)
     local T = _G.CoA.Talents
     local tr, apply = T.transfer, T.apply
     if not (tr and tr.edit and tr.import and apply) then
-        ns.Print("Talent window not ready - talents were not changed.")
-        return done(false)
+        return done(false, "notready")
     end
     local version = _G.CoA.TalentData.version
     if t.version and version and t.version ~= version then
@@ -360,8 +360,7 @@ function Talents:Apply(t, done)
                 apply:Click()
             elseif waited > 3 then
                 self:SetScript("OnUpdate", nil)
-                ns.Print("The saved talent build could not be loaded (Save Changes stayed disabled).")
-                done(false)
+                done(false, "timeout")
             end
         else
             local now = Talents:Current()
@@ -371,11 +370,23 @@ function Talents:Apply(t, done)
                 ns.After(0.5, function() done(true) end)
             elseif waited > 6 then
                 self:SetScript("OnUpdate", nil)
-                ns.Print("Talents were sent, but the server has not confirmed them yet.")
-                done(false)
+                done(false, "timeout")
             end
         end
     end)
+end
+
+-- put a build into the talent window without saving it (clears an unsaved
+-- import that is still showing there)
+function Talents:Preview(t)
+    local T = _G.CoA and _G.CoA.Talents
+    local tr = T and T.transfer
+    if not (t and tr and tr.edit and tr.import) then return end
+    local wasShown = tr:IsShown()
+    tr:Show()
+    tr.edit:SetText(self:Code(t))
+    tr.import:Click()
+    if not wasShown then tr:Hide() end
 end
 
 StaticPopupDialogs["ZBAR_ROLE_TALENTS"] = {
@@ -475,8 +486,10 @@ function Roles:Switch(role, fromSpec)
 end
 
 -- cancelled: stay in the current role (and put Threat Plates back on it)
-function Roles:KeepRole(cur)
-    ns.Print("Role not switched" .. (cur and (" - still " .. cur) or "") .. ".")
+function Roles:KeepRole(cur, quiet)
+    if not quiet then
+        ns.Print("Role not switched" .. (cur and (" - still " .. cur) or "") .. ".")
+    end
     if cur and self:TPLinked() then
         local TP = { Tank = "TANK", DPS = "DPS", Healer = "HEALER" }
         if _G.TidyPlatesThreat:GetRole() ~= TP[cur] then
@@ -490,6 +503,13 @@ end
 function Roles:DoSwitch(role, fromSpec, talents)
     local db = DB()
     local cur = db.currentRole
+    -- what to go back to if the talents fail: nothing half switched
+    local before = talents and {
+        layout = ns.DeepCopy(ns.db.layout),
+        mods = ns.Modifiers and ns.Modifiers:Snapshot(),
+        talents = Talents:Current(),
+        oldProfile = cur and db.roles[cur] and ns.DeepCopy(db.roles[cur]),
+    }
 
     if cur and cur ~= role and db.roleAutoSave then
         if fromSpec then
@@ -535,13 +555,62 @@ function Roles:DoSwitch(role, fromSpec, talents)
     end
 
     if talents then
-        Talents:Apply(talents, function(ok)
-            if ok then ns.Print("Talents changed: " .. Talents:Summary(talents) .. ".") end
-            Finish()
+        Talents:Apply(talents, function(ok, reason)
+            if ok then
+                ns.Print("Talents changed: " .. Talents:Summary(talents) .. ".")
+                Finish()
+            else
+                self:RevertSwitch(cur, before, reason)
+            end
         end)
         return
     end
     Finish()
+end
+
+-- the talents of the new role did not load: go back to the old role as it was
+-- (bars were not touched yet; layout, layers, role and talents go back)
+function Roles:RevertSwitch(cur, before, reason)
+    local db = DB()
+    local function Revert()
+        if InCombatLockdown() then
+            ns.RunOOC("rolerevert", Revert)
+            return
+        end
+        db.currentRole = cur
+        if cur then db.roles[cur] = before.oldProfile end
+        ns.Layout:DropUndo()
+        local layout = ns.DeepCopy(before.layout)
+        ns.Blocks:Merge(layout, ns.db.layout)
+        ns.db.layout = layout
+        ns.Layout:Apply()
+        if before.mods and ns.Modifiers then ns.Modifiers:Load(before.mods) end
+        self:KeepRole(cur, true)
+    end
+    Revert()
+    if reason == "timeout" then
+        ns.Print("Role switch failed (timed out), please try again." .. (cur and (" Still " .. cur .. ".") or ""))
+    else
+        ns.Print("Role switch failed (talent window not ready), please try again." .. (cur and (" Still " .. cur .. ".") or ""))
+    end
+    -- the server may still take the new build a bit later: check, and put the
+    -- old build back if it did (or clear the unsaved import from the window)
+    local old = before.talents
+    if not old then return end
+    ns.After(2, function()
+        local now = Talents:Current()
+        if not now or Talents:Same(now, old) then
+            Talents:Preview(old)
+            return
+        end
+        Talents:Apply(old, function(ok)
+            if ok then
+                ns.Print("Your previous talents are back: " .. Talents:Summary(old) .. ".")
+            else
+                ns.Print("Your talents could not be put back - check the talent window.")
+            end
+        end)
+    end)
 end
 
 function Roles:SetGear(role, name)
