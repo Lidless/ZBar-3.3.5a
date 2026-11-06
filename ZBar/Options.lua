@@ -257,50 +257,64 @@ mp.name = "Ctrl / Shift Layers"
 mp.parent = "ZBar"
 mp:Hide()
 
-local function MLabel(text, x, y, font, width)
-    local fs = mp:CreateFontString(nil, "ARTWORK", font or "GameFontHighlightSmall")
-    fs:SetPoint("TOPLEFT", x, y)
-    fs:SetJustifyH("LEFT")
-    if width then fs:SetWidth(width) end
-    fs:SetText(text or "")
-    return fs
+-- Everything is chained below the previous element, so a text that wraps
+-- to two lines pushes the rest down instead of overlapping it.
+local last -- the element the next one goes below
+
+local function Below(region, x, gap)
+    if last then
+        region:SetPoint("TOPLEFT", last.region, "BOTTOMLEFT", x - last.x, -(gap or 6))
+    else
+        region:SetPoint("TOPLEFT", x, -16)
+    end
+    last = { region = region, x = x }
+    return region
 end
 
-local mt = mp:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
-mt:SetPoint("TOPLEFT", 16, -16)
-mt:SetText("ZBar - Ctrl / Shift Layers")
-MLabel("Give every action button a second and a third action: hold Ctrl or Shift while you press its key "
-    .. "(or click it). Works in combat. Alt is not touched - it stays the game's self-cast key.",
-    16, -42, nil, 560)
+local function MText(text, x, font, gap)
+    local fs = mp:CreateFontString(nil, "ARTWORK", font or "GameFontHighlightSmall")
+    fs:SetWidth(560 - (x - 16))
+    fs:SetJustifyH("LEFT")
+    fs:SetText(text or "")
+    return Below(fs, x, gap)
+end
+
+local function MCheck(name, text, gap)
+    local cb = CreateFrame("CheckButton", name, mp, "InterfaceOptionsCheckButtonTemplate")
+    _G[name .. "Text"]:SetText(text)
+    Below(cb, 16, gap)
+    -- the check box art has empty space under it; texts below it start a bit higher
+    last = { region = cb, x = 16 }
+    return cb
+end
+
+MText("ZBar - Ctrl / Shift Layers", 16, "GameFontNormalLarge")
+MText("Give every action button a second and a third action: hold Ctrl or Shift while you press its key "
+    .. "(or click it). Works in combat. Alt is not touched - it stays the game's self-cast key.", 16, nil, 10)
 
 local layerChecks = {}
-local ly = -86
-for _, layer in ipairs(ns.Modifiers.ORDER) do
+for i, layer in ipairs(ns.Modifiers.ORDER) do
     local L = ns.Modifiers.LAYERS[layer]
-    local cb = CreateFrame("CheckButton", "ZBarLayer" .. L.label, mp, "InterfaceOptionsCheckButtonTemplate")
-    cb:SetPoint("TOPLEFT", 16, ly)
-    _G[cb:GetName() .. "Text"]:SetText("Use the " .. L.label .. " layer")
+    local cb = MCheck("ZBarLayer" .. L.label, "Use the " .. L.label .. " layer", i == 1 and 14 or 10)
     cb:SetScript("OnClick", function(self)
         if not ns.db then return end
         if not ns.Modifiers:SetLayer(layer, self:GetChecked()) then
             self:SetChecked(ns.Modifiers:IsOn(layer)) -- refused (combat)
         end
     end)
-    MLabel("Frees " .. L.frees .. ". Turning it off puts those key bindings back.", 44, ly - 24, "GameFontDisableSmall", 520)
+    MText("Frees " .. L.frees .. ". Turning it off puts those key bindings back.", 44, "GameFontDisableSmall", 0)
     if layer == "shift" then
-        MLabel("Windows: open both Sticky keys and Filter keys (Settings > Accessibility > Keyboard) and turn "
-            .. "EVERY option inside off - the main switch alone is not enough. Or use only the Ctrl layer.", 44, ly - 38, "GameFontDisableSmall", 520)
-        ly = ly - 14
+        MText("|cffffd100Windows:|r in Settings > Accessibility > Keyboard, open the |cffffd100Sticky keys|r and "
+            .. "|cffffd100Filter keys|r menus and turn every option inside those two menus off - turning off only "
+            .. "their main switch is not enough. (The rest of the Keyboard page can stay as it is.) "
+            .. "Or use only the Ctrl layer.", 44, "GameFontDisableSmall", 4)
     end
     layerChecks[layer] = cb
-    ly = ly - 52
 end
-MLabel("Pet actions: put them on any Ctrl or Shift slot (right-click a button in Mode: Modifiers).",
-    44, ly + 6, "GameFontDisableSmall", 520)
+MText("Pet actions: put them on any Ctrl or Shift slot (right-click a button in Mode: Modifiers).",
+    44, "GameFontDisableSmall", 8)
 
-local showIcons = CreateFrame("CheckButton", "ZBarLayerIcons", mp, "InterfaceOptionsCheckButtonTemplate")
-showIcons:SetPoint("TOPLEFT", 16, ly - 16)
-_G[showIcons:GetName() .. "Text"]:SetText("Show the Ctrl / Shift actions on the buttons while the key is held")
+local showIcons = MCheck("ZBarLayerIcons", "Show the Ctrl / Shift actions on the buttons while the key is held", 10)
 showIcons:SetScript("OnClick", function(self)
     if ns.db then
         ns.Modifiers.DB().modShowIcons = self:GetChecked() and true or false
@@ -308,27 +322,29 @@ showIcons:SetScript("OnClick", function(self)
     end
 end)
 
-MLabel("How to assign", 16, ly - 56, "GameFontNormal")
-MLabel("1. Click Set Up (or type /zbar layers) - the bars unlock in Mode: Modifiers.\n"
+MText("How to assign", 16, "GameFontNormal", 14)
+MText("1. Click Set Up (or type /zbar layers) - the bars unlock in Mode: Modifiers.\n"
     .. "2. Pick up a spell, macro or item, hold Ctrl or Shift and drop it on a button.\n"
     .. "3. Right-click a button for pet actions or to clear a layer.\n"
-    .. "4. Lock the bars. Ctrl / Shift + the button's key now does the new action.",
-    16, ly - 74, nil, 560)
+    .. "4. Lock the bars. Ctrl / Shift + the button's key now does the new action.", 16, nil, 6)
 
-local function MButton(text, w, x, y, onClick)
+local function MButton(text, w, onClick, nextTo)
     local b = CreateFrame("Button", nil, mp, "UIPanelButtonTemplate")
     b:SetSize(w, 22)
-    b:SetPoint("TOPLEFT", x, y)
     b:SetText(text)
     b:SetScript("OnClick", onClick)
+    if nextTo then
+        b:SetPoint("LEFT", nextTo, "RIGHT", 10, 0)
+    else
+        Below(b, 16, 12)
+    end
     return b
 end
-MButton("Set Up", 120, 16, ly - 140, function() ns.Modifiers:OpenSetup() end)
-MButton("Clear All Ctrl / Shift Actions", 220, 146, ly - 140, function() StaticPopup_Show("ZBAR_CLEAR_LAYERS") end)
+local setUp = MButton("Set Up", 120, function() ns.Modifiers:OpenSetup() end)
+MButton("Clear All Ctrl / Shift Actions", 220, function() StaticPopup_Show("ZBAR_CLEAR_LAYERS") end, setUp)
 
-MLabel("Saved per character and in each role profile. If your key bindings are account-wide "
-    .. "(not \"Character Specific\"), freeing the keys affects your other characters too.",
-    16, ly - 176, "GameFontDisableSmall", 560)
+MText("Saved per character and in each role profile. If your key bindings are account-wide "
+    .. "(not \"Character Specific\"), freeing the keys affects your other characters too.", 16, "GameFontDisableSmall", 12)
 
 function mp:refresh()
     if not ns.db then return end
