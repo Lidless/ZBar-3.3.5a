@@ -272,6 +272,7 @@ function Mover:Refresh()
     end
     ns.Blocks:Refresh()
     ns.CustomBars:Refresh()
+    if ns.Modifiers then ns.Modifiers:UpdateIcons() end
     if not ns.unlocked then return end
 
     for name, b in pairs(layout.buttons) do

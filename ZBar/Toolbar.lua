@@ -41,7 +41,7 @@ local modeButton
 local function UpdateTexts()
     if ns.mode == "modifiers" then
         modeButton:SetText("Mode: Modifiers")
-        hint:SetText("Hold Ctrl or Shift and drop a spell, macro or item on a button  |  Right-click: pet actions / clear")
+        hint:SetText("Hold Ctrl or Shift to see that layer, drop a spell / macro / item on a button  |  Right-click: pet actions / clear")
     elseif ns.mode == "content" then
         modeButton:SetText("Mode: Content")
         hint:SetText("Drag a button's spell or macro to another slot, like Shift+Drag.")

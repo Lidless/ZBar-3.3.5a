@@ -290,27 +290,35 @@ end
 ------------------------------------------------------------------------
 local icons = {}
 
+-- Normal play: only buttons that have something on the held layer change.
+-- Setup (unlock, Mode: Modifiers): the whole held layer is shown, empty
+-- slots as dark squares, so you see where there is room.
 function Mod:UpdateIcons()
     local layer
-    if ns.db and DB().modShowIcons and not GetCurrentKeyBoardFocus() then
+    local setup = ns.unlocked and ns.mode == "modifiers"
+    if ns.db and (setup or DB().modShowIcons) and not GetCurrentKeyBoardFocus() then
         local ctrl, shift = IsControlKeyDown(), IsShiftKeyDown()
         layer = (ctrl and not shift and "ctrl") or (shift and not ctrl and "shift")
-        if layer and not self:IsOn(layer) then layer = nil end
+        if layer and not setup and not self:IsOn(layer) then layer = nil end
     end
     for name in pairs(ns.Bars.info) do
         local e = layer and self:Get(name, layer)
         local tex = icons[name]
         local icon = e and self:Icon(e)
-        if icon then
+        if icon or (layer and setup) then
             if not tex then
                 local btn = _G[name]
                 tex = btn:CreateTexture(nil, "OVERLAY")
                 tex:SetPoint("TOPLEFT", btn, "TOPLEFT", 2, -2)
                 tex:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", -2, 2)
-                tex:SetTexCoord(0.07, 0.93, 0.07, 0.93)
                 icons[name] = tex
             end
-            tex:SetTexture(icon)
+            if icon then
+                tex:SetTexture(icon)
+                tex:SetTexCoord(0.07, 0.93, 0.07, 0.93)
+            else
+                tex:SetTexture(0.05, 0.05, 0.05, 0.9) -- empty slot on this layer
+            end
             tex:Show()
         elseif tex then
             tex:Hide()
