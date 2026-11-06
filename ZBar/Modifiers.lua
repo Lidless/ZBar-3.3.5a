@@ -69,14 +69,16 @@ function Mod:Describe(e)
     return "?"
 end
 
+-- live icon if the game can give one, else the icon saved when it was assigned
 function Mod:Icon(e)
     if not e then return nil end
-    if e.t == "spell" then return GetSpellTexture(e.name) end
+    if e.t == "spell" then return GetSpellTexture(e.name) or e.icon end
     if e.t == "macro" then
         local idx = GetMacroIndexByName(e.name)
-        if idx and idx > 0 then return (select(2, GetMacroInfo(idx))) end
+        if idx and idx > 0 then return (select(2, GetMacroInfo(idx))) or e.icon end
+        return e.icon
     elseif e.t == "item" then
-        return GetItemIcon and GetItemIcon(e.id) or select(10, GetItemInfo(e.id))
+        return (GetItemIcon and GetItemIcon(e.id)) or select(10, GetItemInfo(e.id)) or e.icon
     elseif e.t == "pet" and GetPetActionInfo then
         local _, _, tex, isToken = GetPetActionInfo(e.index)
         if tex and isToken then tex = _G[tex] end
@@ -89,12 +91,12 @@ local function FromCursor()
     local t, a, b = GetCursorInfo()
     if t == "spell" then
         local name = GetSpellName(a, b or BOOKTYPE_SPELL)
-        return name and { t = "spell", name = name }
+        return name and { t = "spell", name = name, icon = GetSpellTexture(a, b or BOOKTYPE_SPELL) }
     elseif t == "macro" then
-        local name = GetMacroInfo(a)
-        return name and { t = "macro", name = name }
+        local name, icon = GetMacroInfo(a)
+        return name and { t = "macro", name = name, icon = icon }
     elseif t == "item" then
-        return { t = "item", id = a }
+        return { t = "item", id = a, icon = GetItemIcon and GetItemIcon(a) or nil }
     elseif t == "petaction" then
         return { t = "pet", index = a }
     end
@@ -440,25 +442,34 @@ function Mod:UpdateIcons()
     end
     for name in pairs(ns.Bars.info) do
         local e = layer and self:Get(name, layer)
-        local tex = icons[name]
+        local holder = icons[name]
         local icon = e and self:Icon(e)
         if icon or (layer and setup) then
-            if not tex then
-                local btn = _G[name]
-                tex = btn:CreateTexture(nil, "OVERLAY")
-                tex:SetPoint("TOPLEFT", btn, "TOPLEFT", 2, -2)
-                tex:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", -2, 2)
-                icons[name] = tex
+            local btn = _G[name]
+            -- a frame of its own next to the button (same parent), not a texture
+            -- on the button: the game hides buttons whose base slot is empty,
+            -- and the layer icon must still show there
+            if not holder then
+                holder = CreateFrame("Frame", nil, btn:GetParent())
+                holder:EnableMouse(false)
+                holder.tex = holder:CreateTexture(nil, "OVERLAY")
+                holder.tex:SetPoint("TOPLEFT", 2, -2)
+                holder.tex:SetPoint("BOTTOMRIGHT", -2, 2)
+                icons[name] = holder
             end
+            if holder:GetParent() ~= btn:GetParent() then holder:SetParent(btn:GetParent()) end
+            holder:ClearAllPoints()
+            holder:SetAllPoints(btn)
+            holder:SetFrameLevel(btn:GetFrameLevel() + 5)
             if icon then
-                tex:SetTexture(icon)
-                tex:SetTexCoord(0.07, 0.93, 0.07, 0.93)
+                holder.tex:SetTexture(icon)
+                holder.tex:SetTexCoord(0.07, 0.93, 0.07, 0.93)
             else
-                tex:SetTexture(0.05, 0.05, 0.05, 0.9) -- empty slot on this layer
+                holder.tex:SetTexture(0.05, 0.05, 0.05, 0.9) -- empty slot on this layer
             end
-            tex:Show()
-        elseif tex then
-            tex:Hide()
+            holder:Show()
+        elseif holder then
+            holder:Hide()
         end
     end
 end
