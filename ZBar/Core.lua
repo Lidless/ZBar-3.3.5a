@@ -2,7 +2,7 @@
 local ADDON, ns = ...
 _G.ZBar = ns
 
-ns.VERSION    = "0.9.1"
+ns.VERSION    = "0.10.0-beta"
 ns.SNAP       = 16   -- snap distance in screen pixels
 ns.PAD        = 6    -- gap between snapped buttons (Blizzard default spacing)
 ns.BASE_LEVEL = 10   -- frame level of ZBar groups (above the main bar art)
@@ -83,6 +83,7 @@ function ns.Setup()
     end
     ns.ready = true
     ns.Layout:Apply()
+    if ns.Modifiers then ns.Modifiers:Init() end
     if ns.Roles then ns.Roles:OnReady() end
     if ns.Minimap then ns.Minimap:Create() end
 end

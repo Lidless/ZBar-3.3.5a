@@ -39,7 +39,10 @@ end
 local modeButton
 
 local function UpdateTexts()
-    if ns.mode == "content" then
+    if ns.mode == "modifiers" then
+        modeButton:SetText("Mode: Modifiers")
+        hint:SetText("Hold Ctrl or Shift and drop a spell, macro or item on a button  |  Right-click: pet actions / clear")
+    elseif ns.mode == "content" then
         modeButton:SetText("Mode: Content")
         hint:SetText("Drag a button's spell or macro to another slot, like Shift+Drag.")
     else
@@ -49,7 +52,8 @@ local function UpdateTexts()
 end
 
 modeButton = MakeButton("Mode: Buttons", 14, function()
-    ns.mode = (ns.mode == "content") and "buttons" or "content"
+    local NEXT = { buttons = "content", content = "modifiers", modifiers = "buttons" }
+    ns.mode = NEXT[ns.mode] or "buttons"
     UpdateTexts()
     ns.Mover:Refresh()
 end)
@@ -112,6 +116,8 @@ SlashCmdList.ZBAR = function(msg)
         ns.Roles:Save()
     elseif cmd == "reloadrole" then
         ns.Roles:Reload()
+    elseif cmd == "layers" or cmd == "modifiers" then
+        ns.Modifiers:OpenSetup()
     elseif cmd == "options" or cmd == "config" then
         -- called twice: the first call may only open the window on 3.3.5
         InterfaceOptionsFrame_OpenToCategory(ns.OptionsPanel)
@@ -126,5 +132,6 @@ SlashCmdList.ZBAR = function(msg)
         ns.Print("/zbar saverole - save layout + bars to the current role")
         ns.Print("/zbar reloadrole - load the current role's saved layout + bars again")
         ns.Print("/zbar options - open the ZBar options")
+        ns.Print("/zbar layers - set up the Ctrl / Shift layers")
     end
 end

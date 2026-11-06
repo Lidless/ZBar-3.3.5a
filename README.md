@@ -25,6 +25,14 @@ Azeroth and Classless realms), works on any 3.3.5a client.
 - **Content mode**: drag a button's spell or macro instead of the button (the old Shift+drag).
 - Stance / form pages follow the moved main bar buttons.
 
+**Ctrl / Shift layers** (per button, works in combat)
+- Hold **Ctrl** or **Shift** while pressing a button's key (or clicking it) and it does a second / third action: a spell, a macro, an item or a **pet action**.
+- Turn each layer on in *Interface > AddOns > ZBar > Ctrl / Shift Layers*. Turning a layer on frees the default keys in its way (Ctrl+1-0: pet bar keys, Shift+1-6: bar paging); turning it off puts them back.
+- Assign in *Mode: Modifiers* (`/zbar layers`): hold Ctrl or Shift and drop a spell, macro or item on a button; right-click a button for pet actions or to clear.
+- While Ctrl or Shift is held, the buttons show what that layer will do.
+- Alt is not touched: it stays the game's self-cast key.
+- Saved per character and in each role profile.
+
 **Blocks** (move as one unit, keep their own inner layout)
 - Stance bar, totem bar, pet bar, XP bar, reputation bar.
 
@@ -60,6 +68,7 @@ Azeroth and Classless realms), works on any 3.3.5a client.
 | `/zbar saverole` | save layout + bars to the current role |
 | `/zbar reloadrole` | load the current role again |
 | `/zbar options` | open the options (Interface > AddOns > ZBar) |
+| `/zbar layers` | set up the Ctrl / Shift layers |
 
 ## Notes
 

@@ -248,3 +248,110 @@ panel:SetScript("OnShow", function(self) self:refresh() end)
 
 InterfaceOptions_AddCategory(panel)
 ns.OptionsPanel = panel
+
+------------------------------------------------------------------------
+-- Sub-panel: Interface > AddOns > ZBar > Ctrl / Shift Layers
+------------------------------------------------------------------------
+local mp = CreateFrame("Frame", "ZBarModifierPanel", UIParent)
+mp.name = "Ctrl / Shift Layers"
+mp.parent = "ZBar"
+mp:Hide()
+
+local function MLabel(text, x, y, font, width)
+    local fs = mp:CreateFontString(nil, "ARTWORK", font or "GameFontHighlightSmall")
+    fs:SetPoint("TOPLEFT", x, y)
+    fs:SetJustifyH("LEFT")
+    if width then fs:SetWidth(width) end
+    fs:SetText(text or "")
+    return fs
+end
+
+local mt = mp:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
+mt:SetPoint("TOPLEFT", 16, -16)
+mt:SetText("ZBar - Ctrl / Shift Layers")
+MLabel("Give every action button a second and a third action: hold Ctrl or Shift while you press its key "
+    .. "(or click it). Works in combat. Alt is not touched - it stays the game's self-cast key.",
+    16, -42, nil, 560)
+
+local layerChecks = {}
+local ly = -86
+for _, layer in ipairs(ns.Modifiers.ORDER) do
+    local L = ns.Modifiers.LAYERS[layer]
+    local cb = CreateFrame("CheckButton", "ZBarLayer" .. L.label, mp, "InterfaceOptionsCheckButtonTemplate")
+    cb:SetPoint("TOPLEFT", 16, ly)
+    _G[cb:GetName() .. "Text"]:SetText("Use the " .. L.label .. " layer")
+    cb:SetScript("OnClick", function(self)
+        if not ns.db then return end
+        if not ns.Modifiers:SetLayer(layer, self:GetChecked()) then
+            self:SetChecked(ns.Modifiers:IsOn(layer)) -- refused (combat)
+        end
+    end)
+    MLabel("Frees " .. L.frees .. ". Turning it off puts those key bindings back.", 44, ly - 24, "GameFontDisableSmall", 520)
+    layerChecks[layer] = cb
+    ly = ly - 52
+end
+MLabel("Pet actions: put them on any Ctrl or Shift slot (right-click a button in Mode: Modifiers).",
+    44, ly + 6, "GameFontDisableSmall", 520)
+
+local showIcons = CreateFrame("CheckButton", "ZBarLayerIcons", mp, "InterfaceOptionsCheckButtonTemplate")
+showIcons:SetPoint("TOPLEFT", 16, ly - 16)
+_G[showIcons:GetName() .. "Text"]:SetText("Show the Ctrl / Shift actions on the buttons while the key is held")
+showIcons:SetScript("OnClick", function(self)
+    if ns.db then
+        ns.Modifiers.DB().modShowIcons = self:GetChecked() and true or false
+        ns.Modifiers:UpdateIcons()
+    end
+end)
+
+MLabel("How to assign", 16, ly - 56, "GameFontNormal")
+MLabel("1. Click Set Up (or type /zbar layers) - the bars unlock in Mode: Modifiers.\n"
+    .. "2. Pick up a spell, macro or item, hold Ctrl or Shift and drop it on a button.\n"
+    .. "3. Right-click a button for pet actions or to clear a layer.\n"
+    .. "4. Lock the bars. Ctrl / Shift + the button's key now does the new action.",
+    16, ly - 74, nil, 560)
+
+local function MButton(text, w, x, y, onClick)
+    local b = CreateFrame("Button", nil, mp, "UIPanelButtonTemplate")
+    b:SetSize(w, 22)
+    b:SetPoint("TOPLEFT", x, y)
+    b:SetText(text)
+    b:SetScript("OnClick", onClick)
+    return b
+end
+MButton("Set Up", 120, 16, ly - 140, function() ns.Modifiers:OpenSetup() end)
+MButton("Clear All Ctrl / Shift Actions", 220, 146, ly - 140, function() StaticPopup_Show("ZBAR_CLEAR_LAYERS") end)
+
+MLabel("Saved per character and in each role profile. If your key bindings are account-wide "
+    .. "(not \"Character Specific\"), freeing the keys affects your other characters too.",
+    16, ly - 176, "GameFontDisableSmall", 560)
+
+function mp:refresh()
+    if not ns.db then return end
+    for layer, cb in pairs(layerChecks) do cb:SetChecked(ns.Modifiers:IsOn(layer)) end
+    showIcons:SetChecked(ns.Modifiers.DB().modShowIcons)
+end
+mp:SetScript("OnShow", function(self) self:refresh() end)
+InterfaceOptions_AddCategory(mp)
+ns.ModifierPanel = mp
+
+function ns.Modifiers:OpenSetup()
+    if InCombatLockdown() then ns.Print("Cannot unlock in combat.") return end
+    CloseMenus()
+    if not ns.unlocked then ns.Mover:Unlock() end
+    ns.mode = "modifiers"
+    ns.Toolbar:Open()
+    ns.Mover:Refresh()
+    if not ns.Modifiers:IsOn("ctrl") and not ns.Modifiers:IsOn("shift") then
+        ns.Print("Both layers are off - turn them on in Interface > AddOns > ZBar > Ctrl / Shift Layers.")
+    end
+end
+
+StaticPopupDialogs["ZBAR_CLEAR_LAYERS"] = {
+    text = "ZBar: remove every Ctrl and Shift action from all buttons?",
+    button1 = YES,
+    button2 = NO,
+    OnAccept = function() ns.Modifiers:ClearAll() end,
+    timeout = 0,
+    whileDead = true,
+    hideOnEscape = true,
+}

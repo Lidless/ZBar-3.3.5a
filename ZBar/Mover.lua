@@ -83,7 +83,10 @@ end
 ------------------------------------------------------------------------
 local function Overlay_OnEnter(self)
     GameTooltip:SetOwner(self, "ANCHOR_TOP")
-    if ns.mode == "content" then
+    if ns.mode == "modifiers" then
+        GameTooltip:SetText(self.info.label)
+        ns.Modifiers:Tooltip(self.name)
+    elseif ns.mode == "content" then
         local slot = GetSlot(self.btn)
         if slot and HasAction(slot) then
             GameTooltip:SetAction(slot)
@@ -105,7 +108,7 @@ local function Overlay_OnLeave()
 end
 
 local function Overlay_OnDragStart(self)
-    if InCombatLockdown() then return end
+    if InCombatLockdown() or ns.mode == "modifiers" then return end
     if ns.mode == "content" then
         local slot = GetSlot(self.btn)
         if slot then PickupAction(slot) end
@@ -139,13 +142,26 @@ local function Overlay_OnDragStop()
 end
 
 local function Overlay_OnReceiveDrag(self)
-    if ns.mode ~= "content" or InCombatLockdown() then return end
+    if InCombatLockdown() then return end
+    if ns.mode == "modifiers" then
+        ns.Modifiers:Drop(self.name)
+        return
+    end
+    if ns.mode ~= "content" then return end
     local slot = GetSlot(self.btn)
     if slot and GetCursorInfo() then PlaceAction(slot) end
 end
 
 local function Overlay_OnMouseUp(self, button)
     if InCombatLockdown() then return end
+    if ns.mode == "modifiers" then
+        if button == "RightButton" then
+            ns.Modifiers:Menu(self.name)
+        else
+            ns.Modifiers:Drop(self.name)
+        end
+        return
+    end
     if ns.mode == "content" then
         if button == "LeftButton" then Overlay_OnReceiveDrag(self) end
         return
@@ -264,7 +280,10 @@ function Mover:Refresh()
             local ov = overlays[name] or CreateOverlay(info)
             ov:ClearAllPoints()
             ov:SetAllPoints(info.btn)
-            if ns.mode == "content" then
+            if ns.mode == "modifiers" then
+                ov.bg:SetTexture(0.6, 0.2, 0.9, 0.3)
+                ov.text:SetText(ns.Modifiers:Marks(name))
+            elseif ns.mode == "content" then
                 ov.bg:SetTexture(0.2, 0.4, 1, 0.2)
                 ov.text:SetText("")
             elseif b.hidden then

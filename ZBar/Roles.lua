@@ -213,6 +213,7 @@ function Roles:Save(role, quiet, merge)
     local db = DB()
     local r = db.roles[role] or {}
     r.layout = ns.DeepCopy(ns.db.layout)
+    if ns.Modifiers then r.mods = ns.Modifiers:Snapshot() end
     local now = self:CaptureActions()
     if merge and r.actions then
         for slot = 1, NUM_SLOTS do
@@ -275,6 +276,7 @@ function Roles:Switch(role, fromSpec)
     ns.db.layout = layout
     ns.Layout:Apply()
 
+    if r.mods and ns.Modifiers then ns.Modifiers:Load(r.mods) end
     local missing = self:LoadActions(r.actions)
     self:EquipSet(r.gear)
     ns.Print("Switched to " .. role .. ".")
