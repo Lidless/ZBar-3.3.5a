@@ -51,6 +51,7 @@ Azeroth and Classless realms), works on any 3.3.5a client.
 - Switching role loads all of it. Spells the new spec does not know are skipped and listed in chat.
 - Auto-save when switching roles (unlearned talent spells removed by a respec are kept in the profile).
 - Dual spec: optionally switch role automatically with Spec 1 / Spec 2.
+- **Talents (Conquest of Azeroth, optional)**: with "Save talents with roles" on, a manual role save also stores your talent build. Switching to a role with a different build asks first (**Change Talents** / **Bars Only**); the build is loaded through the talent window's own Import and Save Changes, and the bars are loaded after the server confirmed it, so new talent spells land on them too. The automatic save while switching never overwrites talents. The options show each role's build (spec, class / spec points, talent names in the tooltip).
 - **Threat Plates link**: if the reworked Threat Plates with the Tank/DPS/Healer selector is installed, it is the boss - switching role there switches ZBar too, and the other way round.
 
 **Minimap button** (can be hidden in the options)

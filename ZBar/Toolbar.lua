@@ -114,8 +114,6 @@ SlashCmdList.ZBAR = function(msg)
         ns.Roles:Request((msg or ""):match("^%s*%S+%s+(%S+)"))
     elseif cmd == "saverole" then
         ns.Roles:Save()
-    elseif cmd == "coascan" then
-        ns.Roles:CoAScan()
     elseif cmd == "reloadrole" then
         ns.Roles:Reload()
     elseif cmd == "layers" or cmd == "modifiers" then
