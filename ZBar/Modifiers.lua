@@ -192,13 +192,13 @@ end
 
 StaticPopupDialogs["ZBAR_STICKY_KEYS"] = {
     text = "ZBar - Shift layer\n\n"
-        .. "Pressing Shift 5 times in a row makes Windows ask about |cffffd100Sticky Keys|r, "
-        .. "and that window can pull you out of the game.\n\n"
-        .. "Best: in Windows Settings > Accessibility > Keyboard, turn |cffff5555every|r option off under "
-        .. "|cffffd100Sticky keys|r, not just the main switch - Windows can pop up even with Sticky keys off "
-        .. "if an option below it is still on. This includes the keyboard shortcut and \"Lock shortcut keys "
-        .. "when pressed twice in a row\" (that one would make Shift stay pressed). Also turn off the "
-        .. "|cffffd100Filter keys|r keyboard shortcut. Once is enough.\n\n"
+        .. "Windows has two keyboard helpers that react to Shift and can pull you out of the game "
+        .. "or swallow key presses: |cffffd100Sticky keys|r and |cffffd100Filter keys|r.\n\n"
+        .. "In Windows Settings > Accessibility > Keyboard, open |cffff5555both|r menus and turn "
+        .. "|cffff5555every option inside them|r off. Turning off only the main switch is |cffff5555not enough|r - "
+        .. "Windows can still pop up if an option below it is on (e.g. the keyboard shortcut, or "
+        .. "\"Lock shortcut keys when pressed twice in a row\", which would make Shift stay pressed). "
+        .. "Once is enough.\n\n"
         .. "If you would rather avoid it, use only the Ctrl layer - Ctrl has no such problem.",
     button1 = OKAY,
     button2 = "Use Ctrl only",
