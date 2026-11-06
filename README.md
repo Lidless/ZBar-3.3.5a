@@ -29,7 +29,7 @@ Azeroth and Classless realms), works on any 3.3.5a client.
 - Hold **Ctrl** or **Shift** while pressing a button's key (or clicking it) and it does a second / third action: a spell, a macro, an item or a **pet action**.
 - Turn each layer on in *Interface > AddOns > ZBar > Ctrl / Shift Layers*. Turning a layer on frees the default keys in its way (Ctrl+1-0: pet bar keys, Shift+1-6: bar paging); turning it off puts them back.
 - Assign in *Mode: Modifiers* (`/zbar layers`): hold Ctrl or Shift and drop a spell, macro or item on a button; right-click a button for pet actions or to clear.
-- While Ctrl or Shift is held, the buttons show what that layer will do.
+- While Ctrl or Shift is held, the buttons show what that layer will do - icon and tooltip (also on buttons whose base slot is empty).
 - Alt is not touched: it stays the game's self-cast key.
 - **Windows and the Shift layer:** Windows has two keyboard helpers that react to Shift - **Sticky keys** (pressing Shift 5 times pops up a window that can pull you out of the game) and **Filter keys** (holding right Shift for 8 seconds turns it on, then quick key presses can be ignored). In *Settings > Accessibility > Keyboard* open the **Sticky keys** and the **Filter keys** menu and turn **every option inside those two menus** off (the rest of the Keyboard page can stay as it is). Turning off only their main switch is **not enough**: Windows can still pop up if an option below it is on (e.g. the keyboard shortcut, or "Lock shortcut keys when pressed twice in a row", which would make Shift stay pressed). Or use only the Ctrl layer. ZBar shows this the first time you turn the Shift layer on.
 - Saved per character and in each role profile.
