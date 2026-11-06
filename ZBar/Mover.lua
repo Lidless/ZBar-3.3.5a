@@ -94,6 +94,8 @@ local function Overlay_OnEnter(self)
             GameTooltip:SetText("Empty slot")
         end
         GameTooltip:AddLine("Drag: pick up  |  Drop on it: place", 1, 1, 1)
+        ns.Modifiers:LayerLines(self.name)
+        GameTooltip:AddLine("Hold Ctrl / Shift to drag or drop on that layer instead.", 0.8, 0.8, 0.8, true)
     else
         GameTooltip:SetText(self.info.label)
         GameTooltip:AddLine("Drag: move this button", 1, 1, 1)
@@ -110,6 +112,7 @@ end
 local function Overlay_OnDragStart(self)
     if InCombatLockdown() or ns.mode == "modifiers" then return end
     if ns.mode == "content" then
+        if ns.Modifiers:ContentDragStart(self.name) then return end
         local slot = GetSlot(self.btn)
         if slot then PickupAction(slot) end
         return
@@ -149,6 +152,7 @@ local function Overlay_OnReceiveDrag(self)
     end
     if ns.mode ~= "content" then return end
     local slot = GetSlot(self.btn)
+    if ns.Modifiers:ContentDrop(self.name, slot) then return end
     if slot and GetCursorInfo() then PlaceAction(slot) end
 end
 

@@ -44,7 +44,7 @@ local function UpdateTexts()
         hint:SetText("Hold Ctrl or Shift to see that layer, drop a spell / macro / item on a button  |  Right-click: pet actions / clear")
     elseif ns.mode == "content" then
         modeButton:SetText("Mode: Content")
-        hint:SetText("Drag a button's spell or macro to another slot, like Shift+Drag.")
+        hint:SetText("Drag a button's spell or macro to another slot  |  Hold Ctrl / Shift to move that layer instead")
     else
         modeButton:SetText("Mode: Buttons")
         hint:SetText("Drag: button  |  Alt+Drag: bar  |  Right-click: hide  |  Wheel on header / blue box: resize")

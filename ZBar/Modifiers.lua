@@ -187,12 +187,16 @@ end
 ------------------------------------------------------------------------
 -- Assigning
 ------------------------------------------------------------------------
-function Mod:Set(name, layer, e)
-    if InCombatLockdown() then ns.Print("Cannot change this in combat.") return end
+local function Store(name, layer, e)
     local mods = DB().mods
     mods[name] = mods[name] or {}
     mods[name][layer] = e
     if not next(mods[name]) then mods[name] = nil end
+end
+
+function Mod:Set(name, layer, e)
+    if InCombatLockdown() then ns.Print("Cannot change this in combat.") return end
+    Store(name, layer, e)
     self:ApplyAll()
     local info = ns.Bars.info[name]
     ns.Print((info and info.label or name) .. " - " .. self.LAYERS[layer].label .. ": " .. self:Describe(e))
@@ -286,6 +290,111 @@ function Mod:ClearAll()
 end
 
 ------------------------------------------------------------------------
+-- Content mode with Ctrl / Shift held: move layer actions like base actions.
+-- The key held when the drag starts picks the source layer, the key held
+-- at the drop picks the target layer (none = the button's base slot).
+-- Layer to layer drops swap, like the base buttons do.
+------------------------------------------------------------------------
+local function HeldLayer()
+    local ctrl, shift = IsControlKeyDown(), IsShiftKeyDown()
+    return (ctrl and not shift and "ctrl") or (shift and not ctrl and "shift") or nil
+end
+
+local function FindSpellIndex(name)
+    local found
+    for tab = 1, GetNumSpellTabs() do
+        local _, _, offset, num = GetSpellTabInfo(tab)
+        for i = offset + 1, offset + num do
+            if GetSpellName(i, BOOKTYPE_SPELL) == name then found = i end -- last = highest rank
+        end
+    end
+    return found
+end
+
+-- put a layer entry's game object on the cursor (pet actions have none)
+local function PickupEntry(e)
+    ClearCursor()
+    if e.t == "spell" then
+        local idx = FindSpellIndex(e.name)
+        if idx then PickupSpell(idx, BOOKTYPE_SPELL) end
+    elseif e.t == "macro" then
+        local idx = GetMacroIndexByName(e.name)
+        if idx and idx > 0 then PickupMacro(idx) end
+    elseif e.t == "item" then
+        PickupItem(e.id)
+    end
+end
+
+-- returns true if it handled the drag start (a modifier was held)
+function Mod:ContentDragStart(name)
+    local layer = HeldLayer()
+    self.carry = nil
+    if not layer then return false end
+    local e = self:Get(name, layer)
+    if e then
+        PickupEntry(e)
+        self.carry = { from = name, layer = layer, entry = e }
+    end
+    return true
+end
+
+-- returns true if it handled the drop; slot = the button's base action slot
+function Mod:ContentDrop(name, slot)
+    local carry = self.carry
+    if carry and not GetCursorInfo() and carry.entry.t ~= "pet" then
+        carry, self.carry = nil, nil -- the pick-up was cancelled
+    end
+    local layer = HeldLayer()
+    if not layer then
+        if not carry then return false end -- plain base drop: Blizzard handling
+        self.carry = nil
+        if carry.entry.t == "pet" then
+            ns.Print("Pet actions can only go on a Ctrl or Shift layer.")
+            return true
+        end
+        -- layer action -> this button's base slot (the old base action stays
+        -- on the cursor, like a normal swap)
+        if slot then PlaceAction(slot) end
+        Store(carry.from, carry.layer, nil)
+        self:ApplyAll()
+        if ns.Mover then ns.Mover:Refresh() end
+        return true
+    end
+    if not self:IsOn(layer) then
+        ns.Print("The " .. self.LAYERS[layer].label .. " layer is off - turn it on in Interface > AddOns > ZBar > Ctrl / Shift Layers.")
+        return true
+    end
+    local entry = carry and carry.entry or FromCursor()
+    if not entry then return true end
+    local old = self:Get(name, layer)
+    if carry then
+        if not (carry.from == name and carry.layer == layer) then
+            Store(name, layer, entry)
+            Store(carry.from, carry.layer, old) -- swap (or move, if this one was empty)
+        end
+    else
+        Store(name, layer, entry) -- from a base slot or the spellbook
+    end
+    ClearCursor()
+    self.carry = nil
+    self:ApplyAll()
+    if ns.Mover then ns.Mover:Refresh() end
+    local info = ns.Bars.info[name]
+    ns.Print((info and info.label or name) .. " - " .. self.LAYERS[layer].label .. ": " .. self:Describe(entry)
+        .. ((old and not carry) and ("  (replaced " .. self:Describe(old) .. ")") or ""))
+    return true
+end
+
+function Mod:LayerLines(name)
+    for _, layer in ipairs(self.ORDER) do
+        local e = self:Get(name, layer)
+        if e then
+            GameTooltip:AddDoubleLine(self.LAYERS[layer].label .. ":", self:Describe(e), 1, 0.82, 0, 1, 1, 1)
+        end
+    end
+end
+
+------------------------------------------------------------------------
 -- While Ctrl or Shift is held: show that layer's icons on the buttons
 ------------------------------------------------------------------------
 local icons = {}
@@ -295,7 +404,7 @@ local icons = {}
 -- slots as dark squares, so you see where there is room.
 function Mod:UpdateIcons()
     local layer
-    local setup = ns.unlocked and ns.mode == "modifiers"
+    local setup = ns.unlocked and (ns.mode == "modifiers" or ns.mode == "content")
     if ns.db and (setup or DB().modShowIcons) and not GetCurrentKeyBoardFocus() then
         local ctrl, shift = IsControlKeyDown(), IsShiftKeyDown()
         layer = (ctrl and not shift and "ctrl") or (shift and not ctrl and "shift")
