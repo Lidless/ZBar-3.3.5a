@@ -379,9 +379,13 @@ function Talents:Apply(t, done)
 end
 
 StaticPopupDialogs["ZBAR_ROLE_TALENTS"] = {
-    text = "ZBar: switching to %s.\n\nChange your talents to the build saved with this role?\n|cffffd100%s|r",
+    text = "ZBar: switch to %s?\n\nThis also changes your talents to the build saved with this role:\n"
+        .. "|cffffd100%s|r\n\nTalents load first, then the bars (talent spells are on them).\n"
+        .. "Cancel keeps your current role.",
     button1 = "Change Talents",
-    button2 = "Bars Only",
+    button2 = CANCEL,
+    OnShow = function(self) if ns.SolidPopupOn then ns.SolidPopupOn(self) end end,
+    OnHide = function(self) if ns.SolidPopupOff then ns.SolidPopupOff(self) end end,
     OnAccept = function(self, data) if data then data.yes() end end,
     OnCancel = function(self, data) if data then data.no() end end,
     timeout = 0,
@@ -446,6 +450,46 @@ function Roles:Switch(role, fromSpec)
     if InCombatLockdown() then ns.Print("Cannot switch roles in combat.") return end
     local db = DB()
     local cur = db.currentRole
+    local r = db.roles[role]
+
+    -- a role with its own talent build: ask before anything changes
+    -- (not on a dual spec change: the game swaps the talents itself then)
+    local want = not fromSpec and db.roleTalents and r and r.actions and r.talents
+        and Talents:Available() and r.talents
+    local now = want and Talents:Current()
+    if want and now and not Talents:Same(now, want) then
+        StaticPopup_Show("ZBAR_ROLE_TALENTS", role, Talents:Summary(want), {
+            yes = function()
+                if InCombatLockdown() then
+                    ns.Print("Cannot change talents in combat - role not switched.")
+                    Roles:KeepRole(cur)
+                    return
+                end
+                Roles:DoSwitch(role, fromSpec, want)
+            end,
+            no = function() Roles:KeepRole(cur) end,
+        })
+        return
+    end
+    self:DoSwitch(role, fromSpec)
+end
+
+-- cancelled: stay in the current role (and put Threat Plates back on it)
+function Roles:KeepRole(cur)
+    ns.Print("Role not switched" .. (cur and (" - still " .. cur) or "") .. ".")
+    if cur and self:TPLinked() then
+        local TP = { Tank = "TANK", DPS = "DPS", Healer = "HEALER" }
+        if _G.TidyPlatesThreat:GetRole() ~= TP[cur] then
+            _G.TidyPlatesThreat:SetRole(TP[cur]) -- same role as ZBar's: the hook does nothing
+        end
+    end
+    Refresh()
+end
+
+-- talents: the build to load first (only after the player said yes)
+function Roles:DoSwitch(role, fromSpec, talents)
+    local db = DB()
+    local cur = db.currentRole
 
     if cur and cur ~= role and db.roleAutoSave then
         if fromSpec then
@@ -490,23 +534,11 @@ function Roles:Switch(role, fromSpec)
         Refresh()
     end
 
-    local want = db.roleTalents and r.talents and Talents:Available() and r.talents
-    local now = want and Talents:Current()
-    if want and now and not Talents:Same(now, want) then
-        StaticPopup_Show("ZBAR_ROLE_TALENTS", role, Talents:Summary(want), {
-            yes = function()
-                if InCombatLockdown() then
-                    ns.Print("Cannot change talents in combat - only the bars were switched.")
-                    Finish()
-                    return
-                end
-                Talents:Apply(want, function(ok)
-                    if ok then ns.Print("Talents changed: " .. Talents:Summary(want) .. ".") end
-                    Finish()
-                end)
-            end,
-            no = Finish,
-        })
+    if talents then
+        Talents:Apply(talents, function(ok)
+            if ok then ns.Print("Talents changed: " .. Talents:Summary(talents) .. ".") end
+            Finish()
+        end)
         return
     end
     Finish()
