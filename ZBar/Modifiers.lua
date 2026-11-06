@@ -217,7 +217,26 @@ function Mod:SetLayer(layer, on)
     return true
 end
 
+-- The game's popup frames are shared by every addon, so the solid background
+-- is added when this dialog shows and hidden again when it closes.
+local function SolidOn(self)
+    if not self.zbarSolid then
+        local t = self:CreateTexture(nil, "BACKGROUND")
+        t:SetPoint("TOPLEFT", 11, -11)
+        t:SetPoint("BOTTOMRIGHT", -11, 11)
+        t:SetTexture(0.05, 0.05, 0.05, 1)
+        self.zbarSolid = t
+    end
+    self.zbarSolid:Show()
+end
+local function SolidOff(self)
+    if self.zbarSolid then self.zbarSolid:Hide() end
+end
+ns.SolidPopupOn, ns.SolidPopupOff = SolidOn, SolidOff
+
 StaticPopupDialogs["ZBAR_STICKY_KEYS"] = {
+    OnShow = SolidOn,
+    OnHide = SolidOff,
     text = "ZBar - Shift layer\n\n"
         .. "Windows has two keyboard helpers that react to Shift and can pull you out of the game "
         .. "or swallow key presses: |cffffd100Sticky keys|r and |cffffd100Filter keys|r.\n\n"

@@ -214,6 +214,186 @@ function Roles:EquipSet(name)
 end
 
 ------------------------------------------------------------------------
+-- Talents (Conquest of Azeroth): saved with the role when the option is on.
+-- Reads the build with Ex_GetCoATalentState() (no window needed) and loads
+-- it through the talent window's own Import + Save Changes, found by their
+-- field names on the CoA talent controller (CoA.Talents.transfer.import,
+-- CoA.Talents.apply), not by their position in the window.
+------------------------------------------------------------------------
+local Talents = {}
+Roles.Talents = Talents
+
+function Talents:Available()
+    return type(_G.Ex_GetCoATalentState) == "function" and type(_G.CoA) == "table"
+        and type(_G.CoA.Talents) == "table" and type(_G.CoA.TalentData) == "table"
+        and (type(_G.IsCoAEnabled) ~= "function" or _G.IsCoAEnabled()) and true or false
+end
+
+function Talents:Current()
+    if not self:Available() then return nil end
+    local ok, st = pcall(_G.Ex_GetCoATalentState)
+    if not ok or type(st) ~= "table" or type(st.ranks) ~= "table" then return nil end
+    local t = { version = st.version, class = st.class, spec = st.spec, ranks = {} }
+    for id, r in pairs(st.ranks) do
+        if type(r) == "number" and r > 0 then t.ranks[id] = r end
+    end
+    return t
+end
+
+local nodeIndex
+local function Node(id)
+    if not nodeIndex then
+        nodeIndex = {}
+        for _, n in pairs(_G.CoA.TalentData.nodes or {}) do
+            if type(n) == "table" and n.id then nodeIndex[n.id] = n end
+        end
+    end
+    return nodeIndex[id]
+end
+
+local function Spec(id)
+    local specs = _G.CoA and _G.CoA.TalentData and _G.CoA.TalentData.specs
+    return specs and specs[id]
+end
+
+function Talents:SpecName(t)
+    local s = Spec(t.spec)
+    return s and s.name or ("Spec " .. tostring(t.spec))
+end
+
+-- points spent in the class tree and the spec tree (the spec's free passive not counted)
+function Talents:Points(t)
+    local s = Spec(t.spec)
+    local passive = s and s.passiveNode
+    local cp, sp = 0, 0
+    for id, r in pairs(t.ranks) do
+        if id ~= passive then
+            local n = Node(id)
+            if n then
+                cp = cp + r * (n.classCost or 0)
+                sp = sp + r * (n.specCost or 0)
+            end
+        end
+    end
+    return cp, sp
+end
+
+function Talents:Summary(t)
+    if not t then return nil end
+    local cp, sp = self:Points(t)
+    return string.format("%s - %d class / %d spec points", self:SpecName(t), cp, sp)
+end
+
+-- talent names (with ranks) for tooltips
+function Talents:Names(t)
+    local list = {}
+    local s = Spec(t.spec)
+    local passive = s and s.passiveNode
+    for id, r in pairs(t.ranks) do
+        if id ~= passive then
+            local n = Node(id)
+            local name = n and n.name or ("#" .. tostring(id))
+            if n and n.max and n.max > 1 then name = name .. " " .. r .. "/" .. n.max end
+            list[#list + 1] = name
+        end
+    end
+    table.sort(list)
+    return list
+end
+
+-- same spec and same talents (the spec's free passive point is ignored:
+-- the game grants it by itself and it is not part of the build code)
+function Talents:Same(a, b)
+    if not a or not b or a.spec ~= b.spec then return false end
+    local s = Spec(a.spec)
+    local passive = s and s.passiveNode
+    for id, r in pairs(a.ranks) do if id ~= passive and b.ranks[id] ~= r then return false end end
+    for id, r in pairs(b.ranks) do if id ~= passive and a.ranks[id] ~= r then return false end end
+    return true
+end
+
+-- the same code the game's Share Build window shows
+function Talents:Code(t)
+    local s = Spec(t.spec)
+    local passive = s and s.passiveNode
+    local parts = {}
+    for id, r in pairs(t.ranks) do
+        if id ~= passive then parts[#parts + 1] = tostring(id) .. "=" .. tostring(r) end
+    end
+    table.sort(parts)
+    return string.format("CoA:%s:%s:%s:%s", tostring(t.version), tostring(t.class), tostring(t.spec),
+        table.concat(parts, ","))
+end
+
+local function ApplyEnabled(btn)
+    if btn.coaDisabled ~= nil then return not btn.coaDisabled end
+    local e = btn:IsEnabled()
+    return e == true or e == 1
+end
+
+local watcher = CreateFrame("Frame")
+
+-- done(ok) is called when the server confirmed the build, or on failure
+function Talents:Apply(t, done)
+    local T = _G.CoA.Talents
+    local tr, apply = T.transfer, T.apply
+    if not (tr and tr.edit and tr.import and apply) then
+        ns.Print("Talent window not ready - talents were not changed.")
+        return done(false)
+    end
+    local version = _G.CoA.TalentData.version
+    if t.version and version and t.version ~= version then
+        ns.Print("Note: the talent data changed since this build was saved - it may not load completely.")
+    end
+    local wasShown = tr:IsShown()
+    tr:Show()
+    tr.edit:SetText(self:Code(t))
+    tr.import:Click()
+    if not wasShown then tr:Hide() end
+
+    local waited, clicked = 0, false
+    watcher:SetScript("OnUpdate", function(self, elapsed)
+        waited = waited + elapsed
+        if not clicked then
+            if ApplyEnabled(apply) then
+                clicked, waited = true, 0
+                apply:Click()
+            elseif waited > 3 then
+                self:SetScript("OnUpdate", nil)
+                ns.Print("The saved talent build could not be loaded (Save Changes stayed disabled).")
+                done(false)
+            end
+        else
+            local now = Talents:Current()
+            if now and Talents:Same(now, t) then
+                self:SetScript("OnUpdate", nil)
+                -- give the spellbook a moment to pick up the new talent spells
+                ns.After(0.5, function() done(true) end)
+            elseif waited > 6 then
+                self:SetScript("OnUpdate", nil)
+                ns.Print("Talents were sent, but the server has not confirmed them yet.")
+                done(false)
+            end
+        end
+    end)
+end
+
+StaticPopupDialogs["ZBAR_ROLE_TALENTS"] = {
+    text = "ZBar: switch to %s?\n\nThis also changes your talents to the build saved with this role:\n"
+        .. "|cffffd100%s|r\n\nTalents load first, then the bars (talent spells are on them).\n"
+        .. "Cancel keeps your current role.",
+    button1 = "Change Talents",
+    button2 = CANCEL,
+    OnShow = function(self) if ns.SolidPopupOn then ns.SolidPopupOn(self) end end,
+    OnHide = function(self) if ns.SolidPopupOff then ns.SolidPopupOff(self) end end,
+    OnAccept = function(self, data) if data then data.yes() end end,
+    OnCancel = function(self, data) if data then data.no() end end,
+    timeout = 0,
+    whileDead = false,
+    hideOnEscape = true,
+}
+
+------------------------------------------------------------------------
 -- Save / switch
 ------------------------------------------------------------------------
 -- merge: automatic save while switching. A respec removes unlearned talent
@@ -229,6 +409,11 @@ function Roles:Save(role, quiet, merge)
     local r = db.roles[role] or {}
     r.layout = ns.DeepCopy(ns.db.layout)
     if ns.Modifiers then r.mods = ns.Modifiers:Snapshot() end
+    -- talents only on a manual save: the automatic save runs while switching,
+    -- possibly right after a respec, and would store the new build in the old role
+    if not merge and db.roleTalents and Talents:Available() then
+        r.talents = Talents:Current()
+    end
     local now = self:CaptureActions()
     if merge and r.actions then
         for slot = 1, NUM_SLOTS do
@@ -265,6 +450,46 @@ function Roles:Switch(role, fromSpec)
     if InCombatLockdown() then ns.Print("Cannot switch roles in combat.") return end
     local db = DB()
     local cur = db.currentRole
+    local r = db.roles[role]
+
+    -- a role with its own talent build: ask before anything changes
+    -- (not on a dual spec change: the game swaps the talents itself then)
+    local want = not fromSpec and db.roleTalents and r and r.actions and r.talents
+        and Talents:Available() and r.talents
+    local now = want and Talents:Current()
+    if want and now and not Talents:Same(now, want) then
+        StaticPopup_Show("ZBAR_ROLE_TALENTS", role, Talents:Summary(want), {
+            yes = function()
+                if InCombatLockdown() then
+                    ns.Print("Cannot change talents in combat - role not switched.")
+                    Roles:KeepRole(cur)
+                    return
+                end
+                Roles:DoSwitch(role, fromSpec, want)
+            end,
+            no = function() Roles:KeepRole(cur) end,
+        })
+        return
+    end
+    self:DoSwitch(role, fromSpec)
+end
+
+-- cancelled: stay in the current role (and put Threat Plates back on it)
+function Roles:KeepRole(cur)
+    ns.Print("Role not switched" .. (cur and (" - still " .. cur) or "") .. ".")
+    if cur and self:TPLinked() then
+        local TP = { Tank = "TANK", DPS = "DPS", Healer = "HEALER" }
+        if _G.TidyPlatesThreat:GetRole() ~= TP[cur] then
+            _G.TidyPlatesThreat:SetRole(TP[cur]) -- same role as ZBar's: the hook does nothing
+        end
+    end
+    Refresh()
+end
+
+-- talents: the build to load first (only after the player said yes)
+function Roles:DoSwitch(role, fromSpec, talents)
+    local db = DB()
+    local cur = db.currentRole
 
     if cur and cur ~= role and db.roleAutoSave then
         if fromSpec then
@@ -292,14 +517,31 @@ function Roles:Switch(role, fromSpec)
     ns.Layout:Apply()
 
     if r.mods and ns.Modifiers then ns.Modifiers:Load(r.mods) end
-    local missing, lostMacros = self:LoadActions(r.actions)
-    self:EquipSet(r.gear)
-    ns.Print("Switched to " .. role .. ".")
-    if #missing > 0 then
-        ns.Print("Not available, slot left unchanged: " .. table.concat(missing, ", "))
+
+    -- bars come after the talents, so spells of a new build are already known
+    local function Finish()
+        if InCombatLockdown() then
+            ns.RunOOC("rolefinish", Finish)
+            return
+        end
+        local missing, lostMacros = self:LoadActions(r.actions)
+        self:EquipSet(r.gear)
+        ns.Print("Switched to " .. role .. ".")
+        if #missing > 0 then
+            ns.Print("Not available, slot left unchanged: " .. table.concat(missing, ", "))
+        end
+        for _, line in ipairs(lostMacros) do ns.Print(line) end
+        Refresh()
     end
-    for _, line in ipairs(lostMacros) do ns.Print(line) end
-    Refresh()
+
+    if talents then
+        Talents:Apply(talents, function(ok)
+            if ok then ns.Print("Talents changed: " .. Talents:Summary(talents) .. ".") end
+            Finish()
+        end)
+        return
+    end
+    Finish()
 end
 
 function Roles:SetGear(role, name)

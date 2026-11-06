@@ -2,7 +2,7 @@
 ## Title: ZBar
 ## Notes: Non-invasive rearranging of the default Blizzard action bars.
 ## Author: Lidless
-## Version: 0.10.1
+## Version: 0.11.0
 ## SavedVariablesPerCharacter: ZBarCharDB
 
 Core.lua

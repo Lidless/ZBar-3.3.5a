@@ -1,8 +1,13 @@
 -- ZBar minimap button
---   Left click       : open the ZBar options
---   Shift+left click : unlock / lock the bars
---   Right click      : next role (Tank > DPS > Healer)
+--   Left click       : DPS role
+--   Middle click     : Tank role
+--   Right click      : Healer role
+--   Alt+right click  : open the ZBar options
 --   Drag             : move the button around the minimap
+-- (no unlock here on purpose: a stray click would fill the screen with move
+-- handles; unlocking stays in /zbar and the options)
+-- (one button per role: no stepping through a role you don't want, which
+-- matters when roles also change talents)
 -- The icon shows the current role. It can be hidden in the options
 -- (handy when Threat Plates already has its own role button).
 local _, ns = ...
@@ -15,7 +20,7 @@ local ROLE_ICON = {
     Healer = "Interface\\Icons\\Spell_Holy_FlashHeal",
 }
 local NO_ROLE_ICON = "Interface\\Icons\\INV_Misc_QuestionMark"
-local NEXT_ROLE = { Tank = "DPS", DPS = "Healer", Healer = "Tank" }
+local CLICK_ROLE = { LeftButton = "DPS", MiddleButton = "Tank", RightButton = "Healer" }
 
 local button
 
@@ -56,9 +61,10 @@ local function ShowTooltip(self)
         GameTooltip:AddLine("Linked to Threat Plates", 0.54, 0.96, 0.35)
     end
     GameTooltip:AddLine(" ")
-    GameTooltip:AddLine("|cffeda55fLeft click:|r open ZBar options", 0.8, 0.8, 0.8)
-    GameTooltip:AddLine("|cffeda55fShift+left click:|r unlock / lock the bars", 0.8, 0.8, 0.8)
-    GameTooltip:AddLine("|cffeda55fRight click:|r switch role (Tank > DPS > Healer)", 0.8, 0.8, 0.8)
+    GameTooltip:AddLine("|cffeda55fLeft click:|r DPS", 0.8, 0.8, 0.8)
+    GameTooltip:AddLine("|cffeda55fMiddle click:|r Tank", 0.8, 0.8, 0.8)
+    GameTooltip:AddLine("|cffeda55fRight click:|r Healer", 0.8, 0.8, 0.8)
+    GameTooltip:AddLine("|cffeda55fAlt+right click:|r ZBar options", 0.8, 0.8, 0.8)
     GameTooltip:AddLine("|cffeda55fDrag:|r move this button", 0.8, 0.8, 0.8)
     GameTooltip:Show()
 end
@@ -91,7 +97,7 @@ function MM:Create()
     button:SetFrameStrata("MEDIUM")
     button:SetFrameLevel(8)
     button:SetSize(31, 31)
-    button:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+    button:RegisterForClicks("LeftButtonUp", "MiddleButtonUp", "RightButtonUp")
     button:RegisterForDrag("LeftButton")
     button:SetHighlightTexture("Interface\\Minimap\\UI-Minimap-ZoomButton-Highlight")
 
@@ -117,14 +123,17 @@ function MM:Create()
     tag:SetText("Z")
 
     button:SetScript("OnClick", function(self, mouse)
-        if mouse == "RightButton" then
-            local role = ns.Roles:Current()
-            ns.Roles:Request(NEXT_ROLE[role] or "Tank")
-        elseif IsShiftKeyDown() then
-            ns.Mover:Toggle()
+        if mouse == "RightButton" and IsAltKeyDown() then
+            InterfaceOptionsFrame_OpenToCategory(ns.OptionsPanel)
+            InterfaceOptionsFrame_OpenToCategory(ns.OptionsPanel)
         else
-            InterfaceOptionsFrame_OpenToCategory(ns.OptionsPanel)
-            InterfaceOptionsFrame_OpenToCategory(ns.OptionsPanel)
+            local role = CLICK_ROLE[mouse]
+            if not role then return end
+            if role == ns.Roles:Current() then
+                ns.Print("Already in the " .. role .. " role. (Reload Role in the options loads it again.)")
+            else
+                ns.Roles:Request(role)
+            end
         end
     end)
     button:SetScript("OnDragStart", function(self)
