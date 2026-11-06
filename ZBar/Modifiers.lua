@@ -181,8 +181,31 @@ function Mod:SetLayer(layer, on)
         ns.Print(L.label .. " layer off - the default " .. L.label .. " key bindings are back.")
     end
     self:ApplyAll()
+    -- first time the Shift layer goes on: warn about Windows Sticky Keys
+    if on and layer == "shift" and not DB().stickyKeysWarned then
+        DB().stickyKeysWarned = true
+        StaticPopup_Show("ZBAR_STICKY_KEYS")
+    end
+    if ns.ModifierPanel and ns.ModifierPanel:IsShown() then ns.ModifierPanel:refresh() end
     return true
 end
+
+StaticPopupDialogs["ZBAR_STICKY_KEYS"] = {
+    text = "ZBar - Shift layer\n\n"
+        .. "Pressing Shift 5 times in a row makes Windows ask about |cffffd100Sticky Keys|r, "
+        .. "and that window can pull you out of the game.\n\n"
+        .. "If it shows up: click the blue link in it and turn the keyboard shortcut off "
+        .. "(once is enough), then click No.\n\n"
+        .. "If you would rather avoid it, use only the Ctrl layer - Ctrl has no such problem.",
+    button1 = OKAY,
+    button2 = "Use Ctrl only",
+    OnCancel = function(self, data, reason)
+        if reason == "clicked" then Mod:SetLayer("shift", false) end
+    end,
+    timeout = 0,
+    whileDead = true,
+    hideOnEscape = false,
+}
 
 ------------------------------------------------------------------------
 -- Assigning
