@@ -288,8 +288,8 @@ for _, layer in ipairs(ns.Modifiers.ORDER) do
     end)
     MLabel("Frees " .. L.frees .. ". Turning it off puts those key bindings back.", 44, ly - 24, "GameFontDisableSmall", 520)
     if layer == "shift" then
-        MLabel("Windows tip: pressing Shift 5 times can pop up Sticky Keys - click the link in that window "
-            .. "to turn its shortcut off, or use only the Ctrl layer.", 44, ly - 38, "GameFontDisableSmall", 520)
+        MLabel("Windows tip: turn off everything under Sticky keys and the Filter keys shortcut "
+            .. "(Settings > Accessibility > Keyboard), or use only the Ctrl layer.", 44, ly - 38, "GameFontDisableSmall", 520)
         ly = ly - 14
     end
     layerChecks[layer] = cb
