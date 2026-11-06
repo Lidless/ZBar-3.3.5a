@@ -534,6 +534,40 @@ function Roles:CoAScan()
         end
     end
 
+    -- round 3: talent data for the ranked nodes, spec / class entries, controller keys
+    out.deep = {}
+    local okState, st = pcall(_G.Ex_GetCoATalentState or function() end)
+    local coa = _G.CoA
+    if okState and type(st) == "table" and type(coa) == "table" then
+        local td = coa.TalentData
+        if type(td) == "table" then
+            for id in pairs(st.ranks or {}) do
+                out.deep["node " .. tostring(id)] = Ser(td.nodes and td.nodes[id], 2, { n = 120 })
+            end
+            out.deep["spec " .. tostring(st.spec)] = Ser(td.specs and td.specs[st.spec], 2, { n = 120 })
+            out.deep["class " .. tostring(st.class)] = Ser(td.classes and td.classes[st.class], 2, { n = 120 })
+            local anyNode
+            for _, nd in pairs(td.nodes or {}) do anyNode = nd break end
+            out.deep["node sample"] = Ser(anyNode, 2, { n = 120 })
+        end
+        if type(coa.Talents) == "table" then
+            local keys = {}
+            for k, v in pairs(coa.Talents) do
+                local t = type(v)
+                keys[#keys + 1] = tostring(k) .. ":" .. (IsFrameObj(v) and ("frame " .. tostring(v:GetName())
+                    .. (v.GetText and (" '" .. tostring(v:GetText()) .. "'") or "")) or t)
+            end
+            table.sort(keys)
+            out.deep["Talents keys"] = table.concat(keys, ", ")
+            local m = coa.Talents.model
+            if type(m) == "table" then
+                out.deep["model.snapshot"] = Ser(m.snapshot, 2, { n = 120 })
+                out.deep["model.pending"] = Ser(m.pending, 2, { n = 60 })
+                out.deep["model.data"] = Ser(m.data, 1, { n = 60 })
+            end
+        end
+    end
+
     ns.db.coaScan = out
     ns.Print(string.format("CoA scan saved: %d globals, %d window lines, %d talent tabs. Type /reload to write it to disk.",
         n, #out.frames, tabs))
