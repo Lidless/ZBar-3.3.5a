@@ -121,12 +121,23 @@ function Mod:ApplyButton(name)
     if proxies[name] then self:SetLayerAttributes(proxies[name], name) end
 end
 
+-- Each layer is set twice: "shift-" and "alt-shift-" (the game looks up all
+-- held modifiers together, so Alt+Shift would otherwise fall back to the base
+-- action). With Alt held the button's own self-cast check then sends the
+-- layer spell to the player, like Alt does for the base action.
 function Mod:SetLayerAttributes(btn, name)
     local m = DB().mods[name]
     for _, layer in ipairs(self.ORDER) do
-        local p = self.LAYERS[layer].prefix
+        local base = self.LAYERS[layer].prefix
+        for _, p in ipairs({ base, "alt-" .. base }) do
+            self:SetPrefixAttributes(btn, p, self:IsOn(layer) and m and m[layer])
+        end
+    end
+end
+
+function Mod:SetPrefixAttributes(btn, p, e)
+    do
         for _, a in ipairs(ATTRS) do btn:SetAttribute(p .. a .. "*", nil) end
-        local e = self:IsOn(layer) and m and m[layer]
         if e then
             if e.t == "spell" then
                 btn:SetAttribute(p .. "type*", "spell")
@@ -538,6 +549,9 @@ local function Proxy(name)
     local btn = info.btn
     p = CreateFrame("Button", "ZBarStandIn" .. name, btn:GetParent(), "SecureActionButtonTemplate")
     p:RegisterForClicks("AnyUp")
+    -- Alt (or the self-cast key set in the options) casts on yourself, like real buttons
+    p:SetAttribute("checkselfcast", true)
+    p:SetAttribute("checkfocuscast", true)
 
     p.slotArt = p:CreateTexture(nil, "BACKGROUND")
     p.slotArt:SetTexture("Interface\\Buttons\\UI-Quickslot2")
