@@ -7,7 +7,7 @@
 -- Recipes: character macros in ZBarCharDB.macros, account macros in
 -- ZBarDB.macros (both keyed by macro name).
 -- recipe = { name, perChar, mode = "cast" | "sequence", lines = { line... },
---            resetTarget, resetCombat, resetSecs, tooltip, dismount, cancelform,
+--            resetTarget, resetCombat, resetSecs, tooltip, targetmouse, dismount, cancelform,
 --            stopcasting, targetenemy, startattack, petattack, trinket1,
 --            trinket2, hideerrors }
 -- line   = { name, who = "harm" | "help" | nil, mouseover, focus, target, tot,
@@ -92,6 +92,8 @@ end
 -- extras: key, the line it adds, label, help
 MB.EXTRAS = {
     { "tooltip", "#showtooltip", "Show tooltip", "The button shows the icon and tooltip of the spell the macro would cast now." },
+    { "targetmouse", "/target [@mouseover,exists,nodead]", "Target mouse", "Targets whatever is under your mouse first "
+        .. "(also on unit frames), so the spell goes there and it stays your target. Point and press - attack or heal." },
     { "dismount", "/dismount [mounted]", "Dismount", "Gets off your mount first." },
     { "cancelform", "/cancelform", "Cancel form", "Leaves your shapeshift form first." },
     { "stopcasting", "/stopcasting", "Stop casting", "Stops the spell you are casting, so this one goes out right away." },
@@ -879,8 +881,8 @@ local exY = -350
 Text("Extras", 16, exY, "GameFontNormal")
 local extraChecks = {}
 for i, x in ipairs(MB.EXTRAS) do
-    local col, rowN = (i - 1) % 5, math.floor((i - 1) / 5)
-    extraChecks[x[1]] = Check(x[3], 16 + col * 116, exY - 16 - rowN * 22, function(v) cur[x[1]] = v or nil end,
+    local col, rowN = (i - 1) % 6, math.floor((i - 1) / 6)
+    extraChecks[x[1]] = Check(x[3], 16 + col * 96, exY - 16 - rowN * 22, function(v) cur[x[1]] = v or nil end,
         x[3], x[4] .. "\n|cffaaaaaaAdds: " .. x[2] .. "|r")
 end
 
