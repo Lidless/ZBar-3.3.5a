@@ -65,17 +65,19 @@ end
 Label("Layout", 16, -58, "GameFontNormal")
 
 local y = -78
-local function Row(text, help, onClick)
+local function Row(text, help, onClick, extra)
     local b = Button(text, 160, 16, y, onClick)
     local fs = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
     fs:SetPoint("LEFT", b, "RIGHT", 10, 0)
+    fs:SetPoint("RIGHT", panel, "RIGHT", -16, 0) -- long texts wrap instead of running off the page
+    fs:SetJustifyH("LEFT")
     fs:SetText(help)
-    y = y - 26
+    y = y - 26 - (extra or 0)
     return b
 end
 
 -- save, restore and undo of the layout are on the unlock toolbar, not here
-local unlockButton = Row("Unlock Bars", "Unlock, save, restore and undo the layout - all on the toolbar that opens. Lock again there or with /zbar.", function()
+local unlockButton = Row("Unlock Bars", "Unlock, save, restore and undo the layout - all on the toolbar that opens.\nLock again there or with /zbar.", function()
     if ns.unlocked then
         ns.Mover:Lock()
     else
@@ -84,7 +86,7 @@ local unlockButton = Row("Unlock Bars", "Unlock, save, restore and undo the layo
         ns.Mover:Unlock()
     end
     panel:refresh()
-end)
+end, 6) -- two lines of text
 Row("Factory Reset", "Put every bar back to its Blizzard position (reloads the UI).", function()
     StaticPopup_Show("ZBAR_FACTORY_RESET")
 end)
