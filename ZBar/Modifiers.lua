@@ -858,9 +858,12 @@ local function UpdateLockButton()
         if num and not pageMoved then
             local point, rel, relPoint, x, y = num:GetPoint(1)
             if point then
-                pageMoved = { point, rel, relPoint, x, y }
+                local font, size, flags = num:GetFont()
+                pageMoved = { point, rel, relPoint, x, y, font = font, size = size, flags = flags }
                 num:ClearAllPoints()
                 num:SetPoint(point, rel, relPoint, x, (y or 0) + 9)
+                -- bigger, to go with the lock under it
+                if font and size then num:SetFont(font, math.floor(size * 1.5 + 0.5), "OUTLINE") end
             end
         end
         lockButton.icon:SetTexture(LOCK_TEX)
@@ -875,7 +878,8 @@ local function UpdateLockButton()
     else
         if num and pageMoved then
             num:ClearAllPoints()
-            num:SetPoint(unpack(pageMoved))
+            num:SetPoint(pageMoved[1], pageMoved[2], pageMoved[3], pageMoved[4], pageMoved[5])
+            if pageMoved.font then num:SetFont(pageMoved.font, pageMoved.size, pageMoved.flags) end
             pageMoved = nil
         end
         lockButton:Hide()
