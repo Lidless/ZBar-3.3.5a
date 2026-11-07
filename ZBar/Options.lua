@@ -15,6 +15,28 @@ desc:SetPoint("RIGHT", panel, "RIGHT", -16, 0)
 desc:SetJustifyH("LEFT")
 desc:SetText("Rearrange the default action bars without replacing them. Layouts are saved per character.")
 
+-- the sub-pages are easy to miss behind the small + in the list: buttons for them
+local function PageButton(text, w, x, getPanel)
+    local b = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
+    b:SetSize(w, 22)
+    b:SetPoint("TOPRIGHT", x, -12)
+    b:SetText(text)
+    b:SetScript("OnClick", function() ns.OpenSubPanel(getPanel()) end)
+    b:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_BOTTOMLEFT")
+        GameTooltip:SetText(text)
+        GameTooltip:AddLine("Also in the list on the left: click the + next to ZBar.", 1, 1, 1, true)
+        GameTooltip:Show()
+    end)
+    b:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    return b
+end
+local macroPage = PageButton("Macro Builder >", 130, -16, function() return ns.MacroPanel end)
+local layerPage = PageButton("Ctrl / Shift Layers >", 150, -152, function() return ns.ModifierPanel end)
+local pagesText = panel:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
+pagesText:SetPoint("RIGHT", layerPage, "LEFT", -8, 0)
+pagesText:SetText("More pages:")
+
 local function CloseMenus()
     if InterfaceOptionsFrame and InterfaceOptionsFrame:IsShown() then HideUIPanel(InterfaceOptionsFrame) end
     if GameMenuFrame and GameMenuFrame:IsShown() then HideUIPanel(GameMenuFrame) end

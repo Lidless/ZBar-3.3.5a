@@ -2,7 +2,7 @@
 local ADDON, ns = ...
 _G.ZBar = ns
 
-ns.VERSION    = "0.11.2"
+ns.VERSION    = "0.12.0"
 ns.SNAP       = 16   -- snap distance in screen pixels
 ns.PAD        = 6    -- gap between snapped buttons (Blizzard default spacing)
 ns.BASE_LEVEL = 10   -- frame level of ZBar groups (above the main bar art)
@@ -97,6 +97,8 @@ ev:SetScript("OnEvent", function(_, event, arg1)
     if event == "ADDON_LOADED" and arg1 == ADDON then
         ZBarCharDB = ZBarCharDB or {}
         ns.db = ZBarCharDB
+        ZBarDB = ZBarDB or {} -- account-wide (account macros of the macro builder)
+        ns.adb = ZBarDB
         ns.db.version = 1
     elseif event == "PLAYER_ENTERING_WORLD" then
         if not ns.setupScheduled then
