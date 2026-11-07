@@ -74,7 +74,8 @@ local function Row(text, help, onClick)
     return b
 end
 
-local unlockButton = Row("Unlock Bars", "Show the move handles. Lock again from the toolbar or with /zbar.", function()
+-- save, restore and undo of the layout are on the unlock toolbar, not here
+local unlockButton = Row("Unlock Bars", "Unlock, save, restore and undo the layout - all on the toolbar that opens. Lock again there or with /zbar.", function()
     if ns.unlocked then
         ns.Mover:Lock()
     else
@@ -84,30 +85,14 @@ local unlockButton = Row("Unlock Bars", "Show the move handles. Lock again from 
     end
     panel:refresh()
 end)
-Row("Save Layout Only", "Positions only, not the bar contents. Not tied to any role.", function()
-    ns.Layout:Save()
-    panel:refresh()
-end)
-Row("Restore Layout Only", "Back to the last layout-only save (positions only).", function() ns.Layout:Restore() end)
-local undoButton = Row("Undo", "Undo the last move, resize or hide (this session).", function()
-    ns.Layout:Undo()
-    panel:refresh()
-end)
--- the second line sits in the gap below the row
-local undoNote = panel:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
-undoNote:SetPoint("TOPLEFT", undoButton, "BOTTOMRIGHT", 10, -1)
-undoNote:SetText("After a role switch: layout only - bar contents, Ctrl / Shift layers and gear stay. Switch roles back for those.")
-y = y - 12 -- room for the note line
 Row("Factory Reset", "Put every bar back to its Blizzard position (reloads the UI).", function()
     StaticPopup_Show("ZBAR_FACTORY_RESET")
 end)
 
-local savedText = Label("", 16, y - 2, "GameFontDisableSmall")
-
 ------------------------------------------------------------------------
 -- Role section
 ------------------------------------------------------------------------
-local ry = y - 30
+local ry = y - 14
 Label("Role Profiles", 16, ry, "GameFontNormal")
 Label("Each role keeps its own bar positions, bar contents, Ctrl / Shift layers, gear set and (optionally) talents - this character only.", 16, ry - 18)
 local currentText = Label("", 16, ry - 34, "GameFontHighlight")
@@ -241,14 +226,6 @@ local customNone = Label("No custom bars found on this character.", 20, ry - 282
 ------------------------------------------------------------------------
 function panel:refresh()
     unlockButton:SetText(ns.unlocked and "Lock Bars" or "Unlock Bars")
-    local n = ns.Layout:UndoCount()
-    undoButton:SetText(n > 0 and ("Undo (" .. n .. ")") or "Undo")
-    if n > 0 then undoButton:Enable() else undoButton:Disable() end
-    if ns.db and ns.db.savedAt then
-        savedText:SetText("Last layout-only save: " .. ns.db.savedAt)
-    else
-        savedText:SetText("No layout-only save yet.")
-    end
     if not ns.db then return end
 
     local db = ns.Roles.DB()

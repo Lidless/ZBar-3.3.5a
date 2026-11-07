@@ -52,7 +52,7 @@ Azeroth and Classless realms), works on any 3.3.5a client.
 - Conquest of Azeroth class resource bars (`CoAResourceSegmentBar`, `CoAResourceOrb`, ...), each on its own.
 - Hide them from the bar's own right-click menu (**Hide (ZBar)**), from unlock mode, or in the options.
 
-**Layout**
+**Layout** (on the toolbar that opens with `/zbar` or Unlock Bars)
 - **Save Layout Only / Restore Layout Only**: positions only, not tied to a role.
 - **Undo** the last 15 moves, resizes and hides (this session).
 - **Factory Reset**: every bar back to its Blizzard position.
