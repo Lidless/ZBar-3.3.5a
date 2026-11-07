@@ -867,13 +867,11 @@ local function UpdateLockButton()
             end
         end
         lockButton.icon:SetTexture(LOCK_TEX)
-        if Mod.dragOpen then
-            lockButton.icon:SetVertexColor(0.3, 1, 0.3)
-            lockButton.glow:Show()
-        else
-            lockButton.icon:SetVertexColor(1, 0.82, 0) -- gold
-            lockButton.glow:Hide()
-        end
+        local r, g, bl = 1, 0.82, 0 -- gold
+        if Mod.dragOpen then r, g, bl = 0.3, 1, 0.3 end
+        lockButton.icon:SetVertexColor(r, g, bl)
+        for _, t in ipairs(lockButton.shine) do t:SetVertexColor(r, g, bl) end
+        if Mod.dragOpen then lockButton.glow:Show() else lockButton.glow:Hide() end
         lockButton:Show()
     else
         if num and pageMoved then
@@ -917,6 +915,17 @@ local function CreateLockButton()
     b.icon:SetSize(15, 18) -- the picture's own shape, as the dungeon finder shows it
     b.icon:SetPoint("CENTER")
     b.icon:SetTexCoord(0, 0.71875, 0, 0.875)
+    -- the picture is dark grey: the same picture added on top twice makes it bright
+    b.shine = {}
+    for i = 1, 2 do
+        local t = b:CreateTexture(nil, "OVERLAY")
+        t:SetTexture(LOCK_TEX)
+        t:SetSize(15, 18)
+        t:SetPoint("CENTER")
+        t:SetTexCoord(0, 0.71875, 0, 0.875)
+        t:SetBlendMode("ADD")
+        b.shine[i] = t
+    end
     b.glow = b:CreateTexture(nil, "BACKGROUND")
     b.glow:SetTexture("Interface\\Buttons\\UI-ActionButton-Border")
     b.glow:SetBlendMode("ADD")
