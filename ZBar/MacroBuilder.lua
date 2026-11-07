@@ -7,6 +7,7 @@
 -- Recipes: character macros in ZBarCharDB.macros, account macros in
 -- ZBarDB.macros (both keyed by macro name).
 -- recipe = { name, perChar, mode = "cast" | "sequence", lines = { line... },
+--            icon (nil = changes with the spell, or the name of one of its spells),
 --            resetTarget, resetCombat, resetSecs, tooltip, targetmouse, dismount, cancelform,
 --            stopcasting, targetenemy, startattack, petattack, trinket1,
 --            trinket2, hideerrors }
@@ -105,11 +106,26 @@ MB.EXTRAS = {
     { "hideerrors", "/script UIErrorsFrame:Clear()", "Hide errors", "Clears the red error text (\"Not ready yet\", ...) after the macro." },
 }
 
+-- the chosen icon spell, if it is still one of the macro's spells
+function MB:IconSpell(r)
+    if not r.icon then return nil end
+    for _, line in ipairs(Spells(r)) do
+        if line.name == r.icon then return r.icon end
+    end
+end
+
 function MB:Build(r)
     local out = {}
     local function Add(s) out[#out + 1] = s end
+    local iconSpell = self:IconSpell(r)
+    if iconSpell then
+        -- fixed icon: "#show" shows that spell's icon (and tooltip with #showtooltip)
+        Add((r.tooltip and "#showtooltip " or "#show ") .. iconSpell)
+    elseif r.tooltip then
+        Add("#showtooltip")
+    end
     for _, x in ipairs(self.EXTRAS) do
-        if x[1] ~= "hideerrors" and r[x[1]] then Add(x[2]) end
+        if x[1] ~= "hideerrors" and x[1] ~= "tooltip" and r[x[1]] then Add(x[2]) end
     end
     local spells = Spells(r)
     if #spells > 0 then
@@ -165,9 +181,28 @@ local function Updated()
     if MacroFrame and MacroFrame:IsShown() and MacroFrame_Update then MacroFrame_Update() end
 end
 
-local function Create(name, body, perChar)
+-- the macro's own icon (as an index of the game's macro icon list): the chosen
+-- spell's icon if the list has it, else the question mark (which shows the
+-- spell picked by #showtooltip / #show on the button anyway)
+function MB:IconIndex(r)
+    local spell = self:IconSpell(r)
+    local tex = spell and self:Icon(spell)
+    if not (tex and GetNumMacroIcons and GetMacroIconInfo) then return 1 end
+    tex = tex:lower():gsub("/", "\\")
+    for i = 1, GetNumMacroIcons() do
+        local t = GetMacroIconInfo(i)
+        if t then
+            t = t:lower():gsub("/", "\\")
+            if t == tex or ("interface\\icons\\" .. t) == tex then return i end
+        end
+    end
+    return 1
+end
+
+local function Create(name, body, perChar, icon)
+    icon = icon or 1
     local before = MB:Find(name, not perChar) -- a macro of the same name in the other bank is not ours
-    if not pcall(CreateMacro, name, 1, body, perChar and 1 or nil) then
+    if not pcall(CreateMacro, name, icon, body, perChar and 1 or nil) then
         pcall(CreateMacro, name, "INV_Misc_QuestionMark", body, perChar and 1 or nil)
     end
     local found = MB:Find(name, perChar)
@@ -176,16 +211,16 @@ local function Create(name, body, perChar)
         local other = MB:Find(name, not perChar)
         if other and other ~= before then
             DeleteMacro(other)
-            pcall(CreateMacro, name, 1, body, nil, perChar and 1 or nil)
+            pcall(CreateMacro, name, icon, body, nil, perChar and 1 or nil)
             found = MB:Find(name, perChar)
         end
     end
     return found
 end
 
-local function Edit(index, name, body)
-    if not pcall(EditMacro, index, name, nil, body) then
-        pcall(EditMacro, index, name, 1, body)
+local function Edit(index, name, body, icon)
+    if not pcall(EditMacro, index, name, icon or 1, body) then
+        pcall(EditMacro, index, name, nil, body)
     end
 end
 
@@ -217,10 +252,10 @@ function MB:Save(r, orig)
 
     local index
     if same then
-        Edit(same, name, body)
+        Edit(same, name, body, self:IconIndex(r))
         index = same
     elseif origIndex and (orig.perChar and true or false) == perChar then
-        Edit(origIndex, name, body) -- renamed in the same bank
+        Edit(origIndex, name, body, self:IconIndex(r)) -- renamed in the same bank
         origIndex = nil
         index = self:Find(name, perChar)
     else
@@ -230,7 +265,7 @@ function MB:Save(r, orig)
         elseif not perChar and (numAcc or 0) >= MAX_ACCOUNT then
             return false, "No free account macro slot (" .. MAX_ACCOUNT .. " used). Delete one or save it as a character macro."
         end
-        index = Create(name, body, perChar)
+        index = Create(name, body, perChar, self:IconIndex(r))
         if not index then return false, "The game did not create the macro." end
     end
     -- the old one (renamed, or moved to the other bank)
@@ -901,6 +936,32 @@ end
 local pvY = -414
 Text("Macro text", 16, pvY, "GameFontNormal")
 local counter = Text("", 470, pvY, "GameFontNormal")
+Text("Icon:", 120, pvY + 1, "GameFontNormalSmall")
+local iconDrop = CreateFrame("Frame", "ZBarMBIcon", p, "UIDropDownMenuTemplate")
+iconDrop:SetPoint("TOPLEFT", 136, pvY + 8)
+UIDropDownMenu_SetWidth(iconDrop, 150)
+UIDropDownMenu_Initialize(iconDrop, function()
+    local info = UIDropDownMenu_CreateInfo()
+    info.text = "Automatic (follows the spell)"
+    info.checked = not MB:IconSpell(cur)
+    info.func = function() cur.icon = nil Refresh() end
+    UIDropDownMenu_AddButton(info)
+    local seen = {}
+    for _, line in ipairs(cur.lines) do
+        local n = line.name
+        if n and n ~= "" and not seen[n] then
+            seen[n] = true
+            info = UIDropDownMenu_CreateInfo()
+            info.text = n
+            info.icon = MB:Icon(n) or QUESTION
+            info.checked = cur.icon == n
+            info.func = function() cur.icon = n Refresh() end
+            UIDropDownMenu_AddButton(info)
+        end
+    end
+end)
+Tip(iconDrop, "Macro icon", "Automatic: the button shows the spell the macro would cast now. "
+    .. "Or pick one of its spells: the button always shows that icon (adds the spell's name to the first line).")
 local box = CreateFrame("Frame", nil, p)
 box:SetPoint("TOPLEFT", 16, pvY - 16)
 box:SetSize(570, 76)
@@ -1045,6 +1106,9 @@ Refresh = function(keepSpellBox)
 
     for key, cb in pairs(extraChecks) do cb:SetChecked(cur[key]) end
 
+    if cur.icon and not MB:IconSpell(cur) then cur.icon = nil end
+    local iconSpell = MB:IconSpell(cur)
+    UIDropDownMenu_SetText(iconDrop, iconSpell or "Automatic")
     local body = MB:Build(cur)
     preview:SetText(body ~= "" and body or "|cff888888(empty)|r")
     local n = #body

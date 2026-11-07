@@ -40,6 +40,7 @@ Azeroth and Classless realms), works on any 3.3.5a client.
 - Per spell: enemy / friendly / any target, try on mouseover, focus, target, target's target, yourself if you have no target (an enemy target is never healed by mistake), or yourself as a fallback, a held key (Alt, Ctrl, Shift or none) and in / out of combat. The first spell that fits is cast - e.g. attack on an enemy, heal on a friend.
 - Or a cast sequence, with reset on new target, after combat or after some seconds.
 - Extras: show tooltip, target mouse (point and press: targets what is under the mouse first), dismount, cancel form, stop casting, auto target, start attack, pet attack, trinket 1 / 2, hide error messages.
+- Icon: automatic (follows the spell the macro would cast) or one of the macro's spells, always shown.
 - Live preview with a character counter: the game allows 255 characters, a longer macro cannot be saved.
 - Character macro (default) or account macro, chosen per macro. ZBar remembers how each macro was built, so it can be changed here later. Macros not made by ZBar are never overwritten.
 - Pick Up puts the macro on your cursor: drop it on any button or Ctrl / Shift layer.
