@@ -832,8 +832,9 @@ end)
 ------------------------------------------------------------------------
 local LOCK_IDLE = 120
 local lockButton, lockDeadline
-local LOCKED_TEX = "Interface\\Buttons\\LockButton-Locked-Up"
-local OPEN_TEX = "Interface\\Buttons\\LockButton-Unlocked-Up"
+-- the 3.3.5 client has no open-lock picture: the dungeon finder's lock, gold
+-- when locked, green when open
+local LOCK_TEX = "Interface\\LFGFrame\\UI-LFG-ICON-LOCK"
 
 -- a layer took the pickup key, so there is something to unlock
 function Mod:LockNeeded()
@@ -859,15 +860,16 @@ local function UpdateLockButton()
             if point then
                 pageMoved = { point, rel, relPoint, x, y }
                 num:ClearAllPoints()
-                num:SetPoint(point, rel, relPoint, x, (y or 0) + 6)
+                num:SetPoint(point, rel, relPoint, x, (y or 0) + 9)
             end
         end
-        -- SetTexture gives nothing back if the file is missing: letters then
-        if lockButton.icon:SetTexture(Mod.dragOpen and OPEN_TEX or LOCKED_TEX) then
-            lockButton.text:SetText("")
+        lockButton.icon:SetTexture(LOCK_TEX)
+        if Mod.dragOpen then
+            lockButton.icon:SetVertexColor(0.3, 1, 0.3)
+            lockButton.glow:Show()
         else
-            lockButton.icon:SetTexture(nil)
-            lockButton.text:SetText(Mod.dragOpen and "|cff8af559O|r" or "|cffffd100L|r")
+            lockButton.icon:SetVertexColor(1, 1, 1)
+            lockButton.glow:Hide()
         end
         lockButton:Show()
     else
@@ -904,13 +906,18 @@ local function CreateLockButton()
     local num = _G.MainMenuBarPageNumber
     if lockButton or not (art and num) then return end
     local b = CreateFrame("Button", "ZBarDragLock", art)
-    b:SetSize(14, 14)
-    b:SetPoint("TOP", num, "BOTTOM", 0, 0)
+    b:SetSize(20, 20)
+    b:SetPoint("TOP", num, "BOTTOM", 0, 1)
     b:SetFrameLevel(art:GetFrameLevel() + 5)
     b.icon = b:CreateTexture(nil, "ARTWORK")
     b.icon:SetAllPoints()
-    b.text = b:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    b.text:SetPoint("CENTER")
+    b.glow = b:CreateTexture(nil, "BACKGROUND")
+    b.glow:SetTexture("Interface\\Buttons\\UI-ActionButton-Border")
+    b.glow:SetBlendMode("ADD")
+    b.glow:SetVertexColor(0.3, 1, 0.3)
+    b.glow:SetPoint("CENTER")
+    b.glow:SetSize(40, 40)
+    b.glow:Hide()
     b:SetHighlightTexture("Interface\\Buttons\\ButtonHilight-Square", "ADD")
     b:SetScript("OnClick", function()
         if InCombatLockdown() and not Mod.dragOpen then
@@ -961,7 +968,20 @@ local function Label(name)
     return info and info.label or name
 end
 
+local function Debug(...)
+    if not Mod.dragDebug then return end
+    local t = {}
+    for i = 1, select("#", ...) do t[i] = tostring((select(i, ...))) end
+    ns.Print("|cff999999drag:|r " .. table.concat(t, " "))
+end
+
+function Mod:ToggleDragDebug()
+    self.dragDebug = not self.dragDebug
+    ns.Print("Drag debug " .. (self.dragDebug and "on" or "off") .. ".")
+end
+
 local function DragStart(btn, name)
+    Debug("start", name, "slot", SlotOf(btn), "cursor", GetCursorInfo(), "unlocked", ns.unlocked)
     if ns.unlocked or not GetCursorInfo() then return end -- ZBar's own unlock mode has its own handling
     carry = { origin = name, from = name, slot = SlotOf(btn) }
     if lockDeadline then lockDeadline = GetTime() + LOCK_IDLE end
@@ -969,6 +989,7 @@ end
 
 -- something from the cursor landed on button "name" (its slot changed)
 local function Dropped(name)
+    Debug("dropped on", name)
     local moving
     if carry.from then
         moving = Layers(carry.from)
@@ -986,6 +1007,7 @@ end
 
 -- the cursor got empty: the drag is over
 local function DragEnd()
+    Debug("end", carry and carry.pending and "with pending layers" or "")
     local c = carry
     carry = nil
     if not c or not c.pending then return end
@@ -1021,6 +1043,10 @@ dragEv:SetScript("OnEvent", function(_, event, slot)
     if event == "PLAYER_REGEN_DISABLED" then
         if Mod.dragOpen then Mod:SetDragOpen(false) end
     elseif event == "ACTIONBAR_SLOT_CHANGED" then
+        if carry then
+            local f = GetMouseFocus()
+            Debug("slot", slot, "carry slot", carry.slot, "focus", f and f.GetName and f:GetName())
+        end
         if not carry or ns.unlocked or slot == carry.slot then return end
         local name = ButtonName(GetMouseFocus())
         local info = name and ns.Bars.info[name]
