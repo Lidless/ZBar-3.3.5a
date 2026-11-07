@@ -93,11 +93,11 @@ end
 MB.EXTRAS = {
     { "tooltip", "#showtooltip", "Show tooltip", "The button shows the icon and tooltip of the spell the macro would cast now." },
     { "targetmouse", "/target [@mouseover,exists,nodead]", "Target mouse", "Targets whatever is under your mouse first "
-        .. "(also on unit frames), so the spell goes there and it stays your target. Point and press - attack or heal." },
+        .. "(also on unit frames), so the spell goes there and it stays your target. Point and press - attack or heal. Turns off Auto target." },
     { "dismount", "/dismount [mounted]", "Dismount", "Gets off your mount first." },
     { "cancelform", "/cancelform", "Cancel form", "Leaves your shapeshift form first." },
     { "stopcasting", "/stopcasting", "Stop casting", "Stops the spell you are casting, so this one goes out right away." },
-    { "targetenemy", "/targetenemy [noharm][dead]", "Auto target", "No enemy target (or it is dead): targets the nearest enemy first." },
+    { "targetenemy", "/targetenemy [noharm][dead]", "Auto target", "No enemy target (or it is dead): targets the nearest enemy first. Turns off Target mouse." },
     { "startattack", "/startattack [harm,nodead]", "Start attack", "Starts your auto attack on an enemy target." },
     { "petattack", "/petattack [harm,nodead]", "Pet attack", "Sends your pet at an enemy target." },
     { "trinket1", "/use 13", "Trinket 1", "Uses your upper trinket too." },
@@ -880,9 +880,20 @@ local seqNote = Text("", 16, edY - 58, "GameFontDisableSmall", 570)
 local exY = -350
 Text("Extras", 16, exY, "GameFontNormal")
 local extraChecks = {}
+local EXCLUSIVE = { targetmouse = "targetenemy", targetenemy = "targetmouse" }
+local LABEL = {}
+for _, x in ipairs(MB.EXTRAS) do LABEL[x[1]] = x[3] end
 for i, x in ipairs(MB.EXTRAS) do
     local col, rowN = (i - 1) % 6, math.floor((i - 1) / 6)
-    extraChecks[x[1]] = Check(x[3], 16 + col * 96, exY - 16 - rowN * 22, function(v) cur[x[1]] = v or nil end,
+    extraChecks[x[1]] = Check(x[3], 16 + col * 96, exY - 16 - rowN * 22, function(v)
+        cur[x[1]] = v or nil
+        -- Target mouse and Auto target fight each other: one turns the other off
+        local other = EXCLUSIVE[x[1]]
+        if v and other and cur[other] then
+            cur[other] = nil
+            Status("\"" .. LABEL[other] .. "\" turned off: it does not work together with \"" .. x[3] .. "\".")
+        end
+    end,
         x[3], x[4] .. "\n|cffaaaaaaAdds: " .. x[2] .. "|r")
 end
 
