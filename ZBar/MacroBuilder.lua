@@ -182,18 +182,37 @@ local function Updated()
 end
 
 -- the macro's own icon (as an index of the game's macro icon list): the chosen
--- spell's icon if the list has it, else the question mark (which shows the
--- spell picked by #showtooltip / #show on the button anyway)
+-- (or only) spell's icon if the list has it, else the question mark (which
+-- shows the spell picked by #showtooltip / #show on the button anyway)
 function MB:IconIndex(r)
     local spell = self:IconSpell(r)
+    if not spell then
+        -- automatic with a single spell: nothing to follow, so the macro gets
+        -- its icon (on the cursor and in the macro list too); with several
+        -- spells it stays the question mark, the only icon the button replaces
+        -- with the spell the macro would cast now
+        local names = {}
+        for _, line in ipairs(Spells(r)) do names[line.name] = true end
+        local only, count = nil, 0
+        for n in pairs(names) do only, count = n, count + 1 end
+        if count == 1 then spell = only end
+    end
     local tex = spell and self:Icon(spell)
     if not (tex and GetNumMacroIcons and GetMacroIconInfo) then return 1 end
     tex = tex:lower():gsub("/", "\\")
-    for i = 1, GetNumMacroIcons() do
-        local t = GetMacroIconInfo(i)
-        if t then
-            t = t:lower():gsub("/", "\\")
-            if t == tex or ("interface\\icons\\" .. t) == tex then return i end
+    local function Same(t)
+        if not t then return false end
+        t = t:lower():gsub("/", "\\")
+        return t == tex or ("interface\\icons\\" .. t) == tex
+    end
+    local numSpellIcons = GetNumMacroIcons()
+    for i = 1, numSpellIcons do
+        if Same(GetMacroIconInfo(i)) then return i end
+    end
+    -- item icons come after the spell icons in the same numbering
+    if GetNumMacroItemIcons and GetMacroItemIconInfo then
+        for i = 1, GetNumMacroItemIcons() do
+            if Same(GetMacroItemIconInfo(i)) then return numSpellIcons + i end
         end
     end
     return 1
