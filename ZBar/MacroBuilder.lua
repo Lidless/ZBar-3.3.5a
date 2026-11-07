@@ -114,10 +114,25 @@ function MB:IconSpell(r)
     end
 end
 
+-- the spell the button always shows: the chosen icon spell, or the only spell
+-- of the macro (with several spells and Automatic, nil: the button follows
+-- the spell the macro would cast now)
+function MB:ShownSpell(r)
+    local chosen = self:IconSpell(r)
+    if chosen then return chosen end
+    local only, count, seen = nil, 0, {}
+    for _, line in ipairs(Spells(r)) do
+        if not seen[line.name] then seen[line.name] = true only, count = line.name, count + 1 end
+    end
+    if count == 1 then return only end
+end
+
 function MB:Build(r)
     local out = {}
     local function Add(s) out[#out + 1] = s end
-    local iconSpell = self:IconSpell(r)
+    -- a bare #showtooltip shows a question mark while no condition fits (e.g.
+    -- [harm] without an enemy target), so a single spell is named
+    local iconSpell = self:ShownSpell(r)
     if iconSpell then
         -- fixed icon: "#show" shows that spell's icon (and tooltip with #showtooltip)
         Add((r.tooltip and "#showtooltip " or "#show ") .. iconSpell)
@@ -185,18 +200,9 @@ end
 -- (or only) spell's icon if the list has it, else the question mark (which
 -- shows the spell picked by #showtooltip / #show on the button anyway)
 function MB:IconIndex(r)
-    local spell = self:IconSpell(r)
-    if not spell then
-        -- automatic with a single spell: nothing to follow, so the macro gets
-        -- its icon (on the cursor and in the macro list too); with several
-        -- spells it stays the question mark, the only icon the button replaces
-        -- with the spell the macro would cast now
-        local names = {}
-        for _, line in ipairs(Spells(r)) do names[line.name] = true end
-        local only, count = nil, 0
-        for n in pairs(names) do only, count = n, count + 1 end
-        if count == 1 then spell = only end
-    end
+    -- with several spells and Automatic it stays the question mark, the only
+    -- icon the button replaces with the spell the macro would cast now
+    local spell = self:ShownSpell(r)
     local tex = spell and self:Icon(spell)
     if not (tex and GetNumMacroIcons and GetMacroIconInfo) then return 1 end
     tex = tex:lower():gsub("/", "\\")
@@ -979,7 +985,8 @@ UIDropDownMenu_Initialize(iconDrop, function()
         end
     end
 end)
-Tip(iconDrop, "Macro icon", "Automatic: the button shows the spell the macro would cast now. "
+Tip(iconDrop, "Macro icon", "Automatic: the button shows the spell the macro would cast now "
+    .. "(a question mark while none of its spells fits, e.g. no target; a macro with one spell always shows it). "
     .. "Or pick one of its spells: the button always shows that icon (adds the spell's name to the first line).")
 local box = CreateFrame("Frame", nil, p)
 box:SetPoint("TOPLEFT", 16, pvY - 16)
