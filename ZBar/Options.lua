@@ -15,6 +15,28 @@ desc:SetPoint("RIGHT", panel, "RIGHT", -16, 0)
 desc:SetJustifyH("LEFT")
 desc:SetText("Rearrange the default action bars without replacing them. Layouts are saved per character.")
 
+-- the sub-pages are easy to miss behind the small + in the list: buttons for them
+local function PageButton(text, w, x, getPanel)
+    local b = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
+    b:SetSize(w, 22)
+    b:SetPoint("TOPRIGHT", x, -12)
+    b:SetText(text)
+    b:SetScript("OnClick", function() ns.OpenSubPanel(getPanel()) end)
+    b:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_BOTTOMLEFT")
+        GameTooltip:SetText(text)
+        GameTooltip:AddLine("Also in the list on the left: click the + next to ZBar.", 1, 1, 1, true)
+        GameTooltip:Show()
+    end)
+    b:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    return b
+end
+local macroPage = PageButton("Macro Builder >", 130, -16, function() return ns.MacroPanel end)
+local layerPage = PageButton("Ctrl / Shift Layers >", 150, -152, function() return ns.ModifierPanel end)
+local pagesText = panel:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
+pagesText:SetPoint("RIGHT", layerPage, "LEFT", -8, 0)
+pagesText:SetText("More pages:")
+
 local function CloseMenus()
     if InterfaceOptionsFrame and InterfaceOptionsFrame:IsShown() then HideUIPanel(InterfaceOptionsFrame) end
     if GameMenuFrame and GameMenuFrame:IsShown() then HideUIPanel(GameMenuFrame) end
@@ -43,16 +65,19 @@ end
 Label("Layout", 16, -58, "GameFontNormal")
 
 local y = -78
-local function Row(text, help, onClick)
+local function Row(text, help, onClick, extra)
     local b = Button(text, 160, 16, y, onClick)
     local fs = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
     fs:SetPoint("LEFT", b, "RIGHT", 10, 0)
+    fs:SetPoint("RIGHT", panel, "RIGHT", -16, 0) -- long texts wrap instead of running off the page
+    fs:SetJustifyH("LEFT")
     fs:SetText(help)
-    y = y - 26
+    y = y - 26 - (extra or 0)
     return b
 end
 
-local unlockButton = Row("Unlock Bars", "Show the move handles. Lock again from the toolbar or with /zbar.", function()
+-- save, restore and undo of the layout are on the unlock toolbar, not here
+local unlockButton = Row("Unlock Bars", "Unlock, save, restore and undo the layout - all on the toolbar that opens.\nLock again there or with /zbar.", function()
     if ns.unlocked then
         ns.Mover:Lock()
     else
@@ -61,33 +86,18 @@ local unlockButton = Row("Unlock Bars", "Show the move handles. Lock again from 
         ns.Mover:Unlock()
     end
     panel:refresh()
-end)
-Row("Save Layout Only", "Positions only, not the bar contents. Not tied to any role.", function()
-    ns.Layout:Save()
-    panel:refresh()
-end)
-Row("Restore Layout Only", "Back to the last layout-only save (positions only).", function() ns.Layout:Restore() end)
-local undoButton = Row("Undo", "Undo the last move, resize or hide (this session).", function()
-    ns.Layout:Undo()
-    panel:refresh()
-end)
--- the second line sits in the gap below the row
-local undoNote = panel:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
-undoNote:SetPoint("TOPLEFT", undoButton, "BOTTOMRIGHT", 10, -1)
-undoNote:SetText("After a role switch: layout only - bar contents, Ctrl / Shift layers and gear stay. Switch roles back for those.")
-y = y - 12 -- room for the note line
+end, 6) -- two lines of text
 Row("Factory Reset", "Put every bar back to its Blizzard position (reloads the UI).", function()
     StaticPopup_Show("ZBAR_FACTORY_RESET")
 end)
 
-local savedText = Label("", 16, y - 2, "GameFontDisableSmall")
-
 ------------------------------------------------------------------------
 -- Role section
 ------------------------------------------------------------------------
-local ry = y - 30
+local ry = y - 14
 Label("Role Profiles", 16, ry, "GameFontNormal")
-Label("Each role keeps its own bar positions, bar contents, Ctrl / Shift layers, gear set and (optionally) talents - this character only.", 16, ry - 18)
+Label("Each role keeps its own bar positions, bar contents, Ctrl / Shift layers, gear set\nand (optionally) talents - this character only.", 16, ry - 18)
+ry = ry - 12 -- the line above takes two lines: everything below moves down
 local currentText = Label("", 16, ry - 34, "GameFontHighlight")
 
 local roleButtons, roleStatus, gearDrops = {}, {}, {}
@@ -200,6 +210,7 @@ mmHide:SetScript("OnClick", function(self)
     if ns.db then ns.Minimap:SetHidden(self:GetChecked()) end
 end)
 local tpNote = Label("", 360, ry - 244, "GameFontDisableSmall")
+tpNote:SetPoint("RIGHT", panel, "RIGHT", -16, 0) -- wraps instead of running off the page
 
 -- custom (server specific) bars: hide only
 Label("Custom Bars (hide only - moving and scaling stay in their own menu)", 16, ry - 264, "GameFontNormalSmall")
@@ -219,14 +230,6 @@ local customNone = Label("No custom bars found on this character.", 20, ry - 282
 ------------------------------------------------------------------------
 function panel:refresh()
     unlockButton:SetText(ns.unlocked and "Lock Bars" or "Unlock Bars")
-    local n = ns.Layout:UndoCount()
-    undoButton:SetText(n > 0 and ("Undo (" .. n .. ")") or "Undo")
-    if n > 0 then undoButton:Enable() else undoButton:Disable() end
-    if ns.db and ns.db.savedAt then
-        savedText:SetText("Last layout-only save: " .. ns.db.savedAt)
-    else
-        savedText:SetText("No layout-only save yet.")
-    end
     if not ns.db then return end
 
     local db = ns.Roles.DB()
@@ -246,7 +249,7 @@ function panel:refresh()
         _G[talentCheck:GetName() .. "Text"]:SetTextColor(0.5, 0.5, 0.5)
     end
     mmHide:SetChecked(ns.Minimap:IsHidden())
-    tpNote:SetText(linked and "Threat Plates found: its role button switches ZBar too." or "")
+    tpNote:SetText(linked and "Threat Plates' role button switches ZBar too." or "")
     for _, role in ipairs(ns.Roles.list) do
         local r = db.roles[role]
         roleButtons[role]:SetText(role == cur and ("> " .. role .. " <") or role)

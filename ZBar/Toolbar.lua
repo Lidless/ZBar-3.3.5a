@@ -118,6 +118,8 @@ SlashCmdList.ZBAR = function(msg)
         ns.Roles:Reload()
     elseif cmd == "layers" or cmd == "modifiers" then
         ns.Modifiers:OpenSetup()
+    elseif cmd == "macro" or cmd == "macros" then
+        ns.OpenSubPanel(ns.MacroPanel)
     elseif cmd == "options" or cmd == "config" then
         -- called twice: the first call may only open the window on 3.3.5
         InterfaceOptionsFrame_OpenToCategory(ns.OptionsPanel)
@@ -133,5 +135,6 @@ SlashCmdList.ZBAR = function(msg)
         ns.Print("/zbar reloadrole - load the current role's saved layout + bars again")
         ns.Print("/zbar options - open the ZBar options")
         ns.Print("/zbar layers - set up the Ctrl / Shift layers")
+        ns.Print("/zbar macro - open the macro builder")
     end
 end

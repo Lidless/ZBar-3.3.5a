@@ -35,6 +35,16 @@ Azeroth and Classless realms), works on any 3.3.5a client.
 - **Windows and the Shift layer:** Windows has two keyboard helpers that react to Shift - **Sticky keys** (pressing Shift 5 times pops up a window that can pull you out of the game) and **Filter keys** (holding right Shift for 8 seconds turns it on, then quick key presses can be ignored). In *Settings > Accessibility > Keyboard* open the **Sticky keys** and the **Filter keys** menu and turn **every option inside those two menus** off (the rest of the Keyboard page can stay as it is). Turning off only their main switch is **not enough**: Windows can still pop up if an option below it is on (e.g. the keyboard shortcut, or "Lock shortcut keys when pressed twice in a row", which would make Shift stay pressed). Or use only the Ctrl layer. ZBar shows this the first time you turn the Shift layer on.
 - Saved per character and in each role profile.
 
+**Macro builder** (*Interface > AddOns > ZBar > Macro Builder*, or `/zbar macro`)
+- Click a macro together instead of typing it: spells from a list (spellbook with or without cooldown, pet spells, usable items - with search, like in WeakAuras Simple Remastered) or dragged from the spellbook.
+- Per spell: enemy / friendly / any target, try on mouseover, focus, target, target's target, yourself if you have no target (an enemy target is never healed by mistake), or yourself as a fallback, a held key (Alt, Ctrl, Shift or none) and in / out of combat. The first spell that fits is cast - e.g. attack on an enemy, heal on a friend.
+- Or a cast sequence, with reset on new target, after combat or after some seconds.
+- Extras: show tooltip, target mouse (point and press: targets what is under the mouse first), dismount, cancel form, stop casting, auto target, start attack, pet attack, trinket 1 / 2, hide error messages.
+- Icon: automatic (follows the spell the macro would cast) or one of the macro's spells, always shown.
+- Live preview with a character counter: the game allows 255 characters, a longer macro cannot be saved.
+- Character macro (default) or account macro, chosen per macro. ZBar remembers how each macro was built, so it can be changed here later. Macros not made by ZBar are never overwritten.
+- Pick Up puts the macro on your cursor: drop it on any button or Ctrl / Shift layer.
+
 **Blocks** (move as one unit, keep their own inner layout)
 - Stance bar, totem bar, pet bar, XP bar, reputation bar.
 
@@ -42,7 +52,7 @@ Azeroth and Classless realms), works on any 3.3.5a client.
 - Conquest of Azeroth class resource bars (`CoAResourceSegmentBar`, `CoAResourceOrb`, ...), each on its own.
 - Hide them from the bar's own right-click menu (**Hide (ZBar)**), from unlock mode, or in the options.
 
-**Layout**
+**Layout** (on the toolbar that opens with `/zbar` or Unlock Bars)
 - **Save Layout Only / Restore Layout Only**: positions only, not tied to a role.
 - **Undo** the last 15 moves, resizes and hides (this session).
 - **Factory Reset**: every bar back to its Blizzard position.
@@ -72,6 +82,7 @@ Azeroth and Classless realms), works on any 3.3.5a client.
 | `/zbar reloadrole` | load the current role again |
 | `/zbar options` | open the options (Interface > AddOns > ZBar) |
 | `/zbar layers` | set up the Ctrl / Shift layers |
+| `/zbar macro` | open the macro builder |
 
 ## Notes
 
