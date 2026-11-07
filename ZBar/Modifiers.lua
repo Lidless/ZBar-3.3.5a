@@ -909,7 +909,7 @@ local function CreateLockButton()
     if lockButton or not (art and num) then return end
     local b = CreateFrame("Button", "ZBarDragLock", art)
     b:SetSize(20, 20)
-    b:SetPoint("TOP", num, "BOTTOM", -2, 1)
+    b:SetPoint("TOP", num, "BOTTOM", -1, 1)
     b:SetFrameLevel(art:GetFrameLevel() + 5)
     b.icon = b:CreateTexture(nil, "ARTWORK")
     b.icon:SetSize(12, 14) -- about the size of the page number (the dungeon finder's own size)
