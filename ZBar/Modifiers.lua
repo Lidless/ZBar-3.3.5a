@@ -214,13 +214,14 @@ end
 function Mod:UpdatePickupKey()
     if not (GetModifiedClick and SetModifiedClick) then return false end
     local db = DB()
+    self.dragOpen = nil -- the drag lock (below) starts closed again
     local cur = GetModifiedClick(PICKUP)
     if PickupConflict(cur) then
         db.modSavedPickup = db.modSavedPickup or cur
         SetModifiedClick(PICKUP, "NONE")
         ns.Print("Pick Up Action Key set to none while the " .. cur:sub(1, 1) .. cur:sub(2):lower()
             .. " layer is on, so a spell cannot be dragged off a locked bar by accident. "
-            .. "Rearrange spells with /zbar (Content mode).")
+            .. "To move spells, open the small lock under the main bar's page number (or /zbar, Content mode).")
         return true
     end
     local saved = db.modSavedPickup
@@ -242,6 +243,7 @@ function Mod:SetLayer(layer, on)
     if on then changed = FreeKeys(layer) else changed = RestoreKeys(layer) end
     DB().modLayers[layer] = on and true or nil
     if self:UpdatePickupKey() then changed = true end
+    if self.UpdateLock then self:UpdateLock() end
     if changed then SaveBindings(GetCurrentBindingSet()) end
     if on then
         ns.Print(L.label .. " layer on - " .. L.frees .. " now go to your buttons.")
@@ -820,6 +822,270 @@ ev:SetScript("OnEvent", function(_, event)
 end)
 
 ------------------------------------------------------------------------
+-- Drag lock: while a layer has taken the Pick Up Action Key, a small lock
+-- under the main bar's page number opens it again for a while (Blizzard-like
+-- Shift+drag). It locks itself again when combat starts or after 2 minutes
+-- without dragging.
+--
+-- Moving a spell this way also moves the button's Ctrl / Shift actions:
+-- the whole button goes with it (a swap when the other button is not empty).
+------------------------------------------------------------------------
+local LOCK_IDLE = 120
+local lockButton, lockDeadline
+-- the 3.3.5 client has no open-lock picture: the dungeon finder's (grey)
+-- lock, tinted gold when locked, green when open
+local LOCK_TEX = "Interface\\LFGFrame\\UI-LFG-ICON-LOCK"
+
+-- a layer took the pickup key, so there is something to unlock
+function Mod:LockNeeded()
+    return ns.db and DB().modSavedPickup ~= nil
+end
+
+local function PickupKey()
+    return DB().modSavedPickup or "SHIFT"
+end
+
+local function KeyLabel(k)
+    return k:sub(1, 1) .. k:sub(2):lower()
+end
+
+local pageMoved
+local function UpdateLockButton()
+    if not lockButton then return end
+    local num = _G.MainMenuBarPageNumber
+    if Mod:LockNeeded() then
+        -- the page number moves up a little, the lock sits under it
+        if num and not pageMoved then
+            local point, rel, relPoint, x, y = num:GetPoint(1)
+            if point then
+                local font, size, flags = num:GetFont()
+                pageMoved = { point, rel, relPoint, x, y, font = font, size = size, flags = flags }
+                num:ClearAllPoints()
+                num:SetPoint(point, rel, relPoint, x, (y or 0) + 9)
+                -- bigger, to go with the lock under it
+                if font and size then num:SetFont(font, math.floor(size * 1.5 + 0.5), "OUTLINE") end
+            end
+        end
+        lockButton.icon:SetTexture(LOCK_TEX)
+        local r, g, bl = 1, 0.82, 0 -- gold
+        if Mod.dragOpen then r, g, bl = 0.3, 1, 0.3 end
+        lockButton.icon:SetVertexColor(r, g, bl)
+        for _, t in ipairs(lockButton.shine) do t:SetVertexColor(r, g, bl) end
+        if Mod.dragOpen then lockButton.glow:Show() else lockButton.glow:Hide() end
+        lockButton:Show()
+    else
+        if num and pageMoved then
+            num:ClearAllPoints()
+            num:SetPoint(pageMoved[1], pageMoved[2], pageMoved[3], pageMoved[4], pageMoved[5])
+            if pageMoved.font then num:SetFont(pageMoved.font, pageMoved.size, pageMoved.flags) end
+            pageMoved = nil
+        end
+        lockButton:Hide()
+    end
+end
+
+function Mod:SetDragOpen(open)
+    if open and not self:LockNeeded() then open = false end
+    open = open and true or nil
+    if open == self.dragOpen then UpdateLockButton() return end
+    self.dragOpen = open
+    if open then
+        SetModifiedClick(PICKUP, PickupKey()) -- for now only, not saved
+        lockDeadline = GetTime() + LOCK_IDLE
+        ns.Print("Spell dragging open: " .. KeyLabel(PickupKey()) .. "+drag moves a spell together with its "
+            .. "Ctrl / Shift actions. Locks again when combat starts or after 2 minutes without dragging.")
+    else
+        SetModifiedClick(PICKUP, "NONE")
+        lockDeadline = nil
+        ns.Print("Spell dragging locked.")
+    end
+    UpdateLockButton()
+    if lockButton and GameTooltip:IsOwned(lockButton) then lockButton:GetScript("OnEnter")(lockButton) end
+end
+
+local function CreateLockButton()
+    local art = _G.MainMenuBarArtFrame
+    local num = _G.MainMenuBarPageNumber
+    if lockButton or not (art and num) then return end
+    local b = CreateFrame("Button", "ZBarDragLock", art)
+    b:SetSize(20, 20)
+    b:SetPoint("TOP", num, "BOTTOM", -1, 1)
+    b:SetFrameLevel(art:GetFrameLevel() + 5)
+    b.icon = b:CreateTexture(nil, "ARTWORK")
+    b.icon:SetSize(12, 14) -- about the size of the page number (the dungeon finder's own size)
+    b.icon:SetPoint("CENTER")
+    b.icon:SetTexCoord(0, 0.71875, 0, 0.875)
+    -- the picture is dark grey: the same picture added on top twice makes it bright
+    b.shine = {}
+    for i = 1, 2 do
+        local t = b:CreateTexture(nil, "OVERLAY")
+        t:SetTexture(LOCK_TEX)
+        t:SetSize(12, 14)
+        t:SetPoint("CENTER")
+        t:SetTexCoord(0, 0.71875, 0, 0.875)
+        t:SetBlendMode("ADD")
+        b.shine[i] = t
+    end
+    b.glow = b:CreateTexture(nil, "BACKGROUND")
+    b.glow:SetTexture("Interface\\Buttons\\UI-ActionButton-Border")
+    b.glow:SetBlendMode("ADD")
+    b.glow:SetVertexColor(0.3, 1, 0.3)
+    b.glow:SetPoint("CENTER")
+    b.glow:SetSize(40, 40)
+    b.glow:Hide()
+    b:SetHighlightTexture("Interface\\Buttons\\ButtonHilight-Square", "ADD")
+    b:SetScript("OnClick", function()
+        if InCombatLockdown() and not Mod.dragOpen then
+            ns.Print("Spell dragging cannot be opened in combat.")
+            return
+        end
+        Mod:SetDragOpen(not Mod.dragOpen)
+    end)
+    b:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_TOP")
+        GameTooltip:SetText(Mod.dragOpen and "Spell dragging: open" or "Spell dragging: locked")
+        GameTooltip:AddLine(Mod.dragOpen
+            and (KeyLabel(PickupKey()) .. "+drag moves a spell with its Ctrl / Shift actions. Click to lock.")
+            or ("Click to open: " .. KeyLabel(PickupKey()) .. "+drag moves spells again, with their Ctrl / Shift actions."),
+            1, 1, 1, true)
+        GameTooltip:AddLine("Locked while a layer uses the " .. KeyLabel(PickupKey())
+            .. " key, so a spell is not pulled off by accident. Locks again in combat or after 2 minutes.", 0.7, 0.7, 0.7, true)
+        GameTooltip:Show()
+    end)
+    b:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    b:SetScript("OnUpdate", function()
+        if lockDeadline and GetTime() > lockDeadline and not GetCursorInfo() then Mod:SetDragOpen(false) end
+    end)
+    lockButton = b
+end
+
+function Mod:UpdateLock()
+    CreateLockButton()
+    if not self:LockNeeded() then self.dragOpen = nil end
+    UpdateLockButton()
+end
+
+-- the whole button moves: base action (the game does that) + its layers
+-- carry = { origin = name, from = name or nil, slot = slot on the cursor, pending = layers or nil }
+local carry
+
+local function Layers(name)
+    local m = DB().mods[name]
+    return m and ns.DeepCopy(m) or nil
+end
+
+local function SetLayers(name, layers)
+    DB().mods[name] = (layers and next(layers)) and ns.DeepCopy(layers) or nil
+end
+
+local function Label(name)
+    local info = ns.Bars.info[name]
+    return info and info.label or name
+end
+
+local function Debug(...)
+    if not Mod.dragDebug then return end
+    local t = {}
+    for i = 1, select("#", ...) do t[i] = tostring((select(i, ...))) end
+    ns.Print("|cff999999drag:|r " .. table.concat(t, " "))
+end
+
+function Mod:ToggleDragDebug()
+    self.dragDebug = not self.dragDebug
+    ns.Print("Drag debug " .. (self.dragDebug and "on" or "off") .. ".")
+end
+
+local function DragStart(btn, name)
+    Debug("start", name, "slot", SlotOf(btn), "cursor", GetCursorInfo(), "unlocked", ns.unlocked)
+    if ns.unlocked or not GetCursorInfo() then return end -- ZBar's own unlock mode has its own handling
+    carry = { origin = name, from = name, slot = SlotOf(btn) }
+    if lockDeadline then lockDeadline = GetTime() + LOCK_IDLE end
+end
+
+-- something from the cursor landed on button "name" (its slot changed)
+local function Dropped(name)
+    Debug("dropped on", name)
+    local moving
+    if carry.from then
+        moving = Layers(carry.from)
+        SetLayers(carry.from, nil)
+    else
+        moving = carry.pending
+    end
+    local old = Layers(name)
+    SetLayers(name, moving)
+    carry.from, carry.pending = nil, old
+    carry.slot = SlotOf(ns.Bars.info[name].btn)
+    if lockDeadline then lockDeadline = GetTime() + LOCK_IDLE end
+    Mod:ApplyAll()
+end
+
+-- the cursor got empty: the drag is over
+local function DragEnd()
+    Debug("end", carry and carry.pending and "with pending layers" or "")
+    local c = carry
+    carry = nil
+    if not c or not c.pending then return end
+    -- the other button's spell was thrown away: its Ctrl / Shift actions are
+    -- not, they go to the button the drag started from (if it has none now)
+    local into = c.origin
+    if into and not DB().mods[into] then
+        SetLayers(into, c.pending)
+        ns.Print("Ctrl / Shift actions of the removed spell went to " .. Label(into) .. ".")
+    else
+        ns.Print("The Ctrl / Shift actions of the removed spell were removed too.")
+    end
+    Mod:ApplyAll()
+end
+
+local hooked = {}
+function Mod:HookDrags()
+    for name, info in pairs(ns.Bars.info) do
+        local btn = info.btn
+        if btn and not hooked[btn] and btn:GetScript("OnDragStart") then
+            hooked[btn] = true
+            btn:HookScript("OnDragStart", function(self) DragStart(self, name) end)
+        end
+    end
+end
+
+local dragEv = CreateFrame("Frame")
+dragEv:RegisterEvent("ACTIONBAR_SLOT_CHANGED")
+dragEv:RegisterEvent("CURSOR_UPDATE")
+dragEv:RegisterEvent("PLAYER_REGEN_DISABLED")
+dragEv:SetScript("OnEvent", function(_, event, slot)
+    if not ns.ready then return end
+    if event == "PLAYER_REGEN_DISABLED" then
+        if Mod.dragOpen then Mod:SetDragOpen(false) end
+    elseif event == "ACTIONBAR_SLOT_CHANGED" then
+        if carry then
+            local f = GetMouseFocus()
+            Debug("slot", slot, "carry slot", carry.slot, "focus", f and f.GetName and f:GetName())
+        end
+        if not carry or ns.unlocked or slot == carry.slot then return end
+        -- GetMouseFocus() gives nothing while dragging: the button that shows
+        -- this slot (the one under the mouse if more than one does)
+        local found, under
+        for name, info in pairs(ns.Bars.info) do
+            local btn = info.btn
+            if btn and btn:IsVisible() and SlotOf(btn) == slot then
+                found = found or name
+                if MouseIsOver(btn) then under = name end
+            end
+        end
+        Debug("target", under or found)
+        if under or found then Dropped(under or found) end
+    elseif event == "CURSOR_UPDATE" then
+        if carry and not GetCursorInfo() then
+            -- placing and clearing come in the same moment: decide a bit later
+            ns.After(0.05, function()
+                if carry and not GetCursorInfo() then DragEnd() end
+            end)
+        end
+    end
+end)
+
+------------------------------------------------------------------------
 -- Startup (called from Core once the bars are set up)
 ------------------------------------------------------------------------
 function Mod:Init()
@@ -833,6 +1099,8 @@ function Mod:Init()
     if self:UpdatePickupKey() then changed = true end
     if changed then SaveBindings(GetCurrentBindingSet()) end
     self:ApplyAll()
+    self:HookDrags()
+    self:UpdateLock()
 end
 
 -- role profiles
