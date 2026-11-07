@@ -909,10 +909,10 @@ local function CreateLockButton()
     if lockButton or not (art and num) then return end
     local b = CreateFrame("Button", "ZBarDragLock", art)
     b:SetSize(20, 20)
-    b:SetPoint("TOP", num, "BOTTOM", 0, 1)
+    b:SetPoint("TOP", num, "BOTTOM", -2, 1)
     b:SetFrameLevel(art:GetFrameLevel() + 5)
     b.icon = b:CreateTexture(nil, "ARTWORK")
-    b.icon:SetSize(15, 18) -- the picture's own shape, as the dungeon finder shows it
+    b.icon:SetSize(12, 14) -- about the size of the page number (the dungeon finder's own size)
     b.icon:SetPoint("CENTER")
     b.icon:SetTexCoord(0, 0.71875, 0, 0.875)
     -- the picture is dark grey: the same picture added on top twice makes it bright
@@ -920,7 +920,7 @@ local function CreateLockButton()
     for i = 1, 2 do
         local t = b:CreateTexture(nil, "OVERLAY")
         t:SetTexture(LOCK_TEX)
-        t:SetSize(15, 18)
+        t:SetSize(12, 14)
         t:SetPoint("CENTER")
         t:SetTexCoord(0, 0.71875, 0, 0.875)
         t:SetBlendMode("ADD")
