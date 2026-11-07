@@ -37,7 +37,7 @@ Azeroth and Classless realms), works on any 3.3.5a client.
 
 **Macro builder** (*Interface > AddOns > ZBar > Macro Builder*, or `/zbar macro`)
 - Click a macro together instead of typing it: spells from a list (spellbook with or without cooldown, pet spells, usable items - with search, like in WeakAuras Simple Remastered) or dragged from the spellbook.
-- Per spell: enemy / friendly / any target, try on mouseover, focus, target, target's target, yourself as a fallback, a held key (Alt, Ctrl, Shift or none) and in / out of combat. The first spell that fits is cast - e.g. attack on an enemy, heal on a friend.
+- Per spell: enemy / friendly / any target, try on mouseover, focus, target, target's target, yourself if you have no target (an enemy target is never healed by mistake), or yourself as a fallback, a held key (Alt, Ctrl, Shift or none) and in / out of combat. The first spell that fits is cast - e.g. attack on an enemy, heal on a friend.
 - Or a cast sequence, with reset on new target, after combat or after some seconds.
 - Extras: show tooltip, dismount, cancel form, stop casting, auto target, start attack, pet attack, trinket 1 / 2, hide error messages.
 - Live preview with a character counter: the game allows 255 characters, a longer macro cannot be saved.

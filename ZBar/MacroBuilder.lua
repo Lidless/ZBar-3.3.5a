@@ -11,7 +11,8 @@
 --            stopcasting, targetenemy, startattack, petattack, trinket1,
 --            trinket2, hideerrors }
 -- line   = { name, who = "harm" | "help" | nil, mouseover, focus, target, tot,
---            self, mod = "alt" | "ctrl" | "shift" | "nomod" | nil,
+--            selfnt (no target: cast without a unit, the game's Auto Self Cast
+--            puts helpful spells on you), self (always yourself), mod = "alt" | "ctrl" | "shift" | "nomod" | nil,
 --            combat = "combat" | "nocombat" | nil }
 -- In sequence mode the conditions of line 1 are used for the whole sequence.
 local _, ns = ...
@@ -65,6 +66,14 @@ function MB:Clauses(c)
     if c.focus then Add("focus") end
     if c.target then Add(nil) end
     if c.tot then Add("targettarget") end
+    if c.selfnt then
+        -- [noexists] checks the target; the spell goes out without a unit, so
+        -- the game's Auto Self Cast (on by default) puts it on you. An enemy
+        -- target does not match, so it is never cast on you by accident.
+        local q = { "noexists" }
+        for _, e in ipairs(extra) do q[#q + 1] = e end
+        out[#out + 1] = "[" .. table.concat(q, ",") .. "]"
+    end
     if c.self then Add("player", true) end
     if #out == 0 and (rel or #extra > 0) then Add(nil) end
     local s = table.concat(out)
@@ -848,11 +857,14 @@ local combatDrop = Drop("ZBarMBCombat", 482, edY, 80,
 local tryText = Text("Try on:", 16, edY - 38, "GameFontNormalSmall")
 local targetChecks = {}
 local TARGETS = {
-    { "mouseover", "Mouseover", 62, "The unit under your mouse (also on unit frames), if there is one." },
-    { "focus", "Focus", 150, "Your focus, if you have one." },
-    { "target", "Target", 214, "Your current target." },
-    { "tot", "Target's target", 284, "Whoever your target is targeting (e.g. heal the tank your enemy hits)." },
-    { "self", "Yourself if none fits", 410, "Casts on you when none of the above fits (only for spells that can go on you)." },
+    { "mouseover", "Mouseover", 58, "The unit under your mouse (also on unit frames), if there is one." },
+    { "focus", "Focus", 138, "Your focus, if you have one." },
+    { "target", "Target", 194, "Your current target." },
+    { "tot", "Target's target", 256, "Whoever your target is targeting (e.g. heal the tank your enemy hits)." },
+    { "selfnt", "Me if no target", 372, "You have no target: the spell goes on you (like the game's Auto Self Cast). "
+        .. "With an enemy target it is not cast on you." },
+    { "self", "Me as fallback", 480, "Casts on you when nothing before it fits - also when your target is an enemy "
+        .. "(only for spells that can go on you)." },
 }
 for _, t in ipairs(TARGETS) do
     targetChecks[t[1]] = Check(t[2], t[3], edY - 34, function(v)
@@ -945,7 +957,9 @@ local function Summary(line, i)
         local who = c.who == "harm" and "Enemy" or c.who == "help" and "Friendly" or nil
         local on = {}
         for _, t in ipairs(TARGETS) do
-            if c[t[1]] then on[#on + 1] = (t[1] == "self") and "Yourself" or t[2] end
+            if c[t[1]] then
+                on[#on + 1] = (t[1] == "self") and "me" or (t[1] == "selfnt") and "me if no target" or t[2]
+            end
         end
         if who then parts[#parts + 1] = who end
         if #on > 0 then parts[#parts + 1] = table.concat(on, " > ") end
