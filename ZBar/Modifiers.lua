@@ -832,8 +832,8 @@ end)
 ------------------------------------------------------------------------
 local LOCK_IDLE = 120
 local lockButton, lockDeadline
--- the 3.3.5 client has no open-lock picture: the dungeon finder's lock, gold
--- when locked, green when open
+-- the 3.3.5 client has no open-lock picture: the dungeon finder's (grey)
+-- lock, tinted gold when locked, green when open
 local LOCK_TEX = "Interface\\LFGFrame\\UI-LFG-ICON-LOCK"
 
 -- a layer took the pickup key, so there is something to unlock
@@ -871,7 +871,7 @@ local function UpdateLockButton()
             lockButton.icon:SetVertexColor(0.3, 1, 0.3)
             lockButton.glow:Show()
         else
-            lockButton.icon:SetVertexColor(1, 1, 1)
+            lockButton.icon:SetVertexColor(1, 0.82, 0) -- gold
             lockButton.glow:Hide()
         end
         lockButton:Show()
@@ -1054,9 +1054,18 @@ dragEv:SetScript("OnEvent", function(_, event, slot)
             Debug("slot", slot, "carry slot", carry.slot, "focus", f and f.GetName and f:GetName())
         end
         if not carry or ns.unlocked or slot == carry.slot then return end
-        local name = ButtonName(GetMouseFocus())
-        local info = name and ns.Bars.info[name]
-        if info and SlotOf(info.btn) == slot then Dropped(name) end
+        -- GetMouseFocus() gives nothing while dragging: the button that shows
+        -- this slot (the one under the mouse if more than one does)
+        local found, under
+        for name, info in pairs(ns.Bars.info) do
+            local btn = info.btn
+            if btn and btn:IsVisible() and SlotOf(btn) == slot then
+                found = found or name
+                if MouseIsOver(btn) then under = name end
+            end
+        end
+        Debug("target", under or found)
+        if under or found then Dropped(under or found) end
     elseif event == "CURSOR_UPDATE" then
         if carry and not GetCursorInfo() then
             -- placing and clearing come in the same moment: decide a bit later
