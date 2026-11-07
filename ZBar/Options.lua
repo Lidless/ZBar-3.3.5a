@@ -96,7 +96,8 @@ end)
 ------------------------------------------------------------------------
 local ry = y - 14
 Label("Role Profiles", 16, ry, "GameFontNormal")
-Label("Each role keeps its own bar positions, bar contents, Ctrl / Shift layers, gear set and (optionally) talents - this character only.", 16, ry - 18)
+Label("Each role keeps its own bar positions, bar contents, Ctrl / Shift layers, gear set\nand (optionally) talents - this character only.", 16, ry - 18)
+ry = ry - 12 -- the line above takes two lines: everything below moves down
 local currentText = Label("", 16, ry - 34, "GameFontHighlight")
 
 local roleButtons, roleStatus, gearDrops = {}, {}, {}
@@ -209,6 +210,7 @@ mmHide:SetScript("OnClick", function(self)
     if ns.db then ns.Minimap:SetHidden(self:GetChecked()) end
 end)
 local tpNote = Label("", 360, ry - 244, "GameFontDisableSmall")
+tpNote:SetPoint("RIGHT", panel, "RIGHT", -16, 0) -- wraps instead of running off the page
 
 -- custom (server specific) bars: hide only
 Label("Custom Bars (hide only - moving and scaling stay in their own menu)", 16, ry - 264, "GameFontNormalSmall")
@@ -247,7 +249,7 @@ function panel:refresh()
         _G[talentCheck:GetName() .. "Text"]:SetTextColor(0.5, 0.5, 0.5)
     end
     mmHide:SetChecked(ns.Minimap:IsHidden())
-    tpNote:SetText(linked and "Threat Plates found: its role button switches ZBar too." or "")
+    tpNote:SetText(linked and "Threat Plates' role button switches ZBar too." or "")
     for _, role in ipairs(ns.Roles.list) do
         local r = db.roles[role]
         roleButtons[role]:SetText(role == cur and ("> " .. role .. " <") or role)
