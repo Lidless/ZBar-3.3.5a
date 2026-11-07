@@ -12,6 +12,7 @@
 -- Per character: db.modLayers = { ctrl = true, shift = true }
 --                db.mods = { [buttonName] = { ctrl = entry, shift = entry } }
 --                db.modSavedBinds = { [key] = original binding }
+--                db.modSavedPickup = the Pick Up Action Key before a layer took it
 -- entry: { t = "spell", name } | { t = "macro", name } | { t = "item", id } | { t = "pet", index }
 -- The mods are also part of the role profiles.
 local _, ns = ...
@@ -195,13 +196,53 @@ local function RestoreKeys(layer)
     return changed
 end
 
+-- The game's "Pick Up Action Key" (Shift by default) drags a spell off a
+-- locked bar. With that key used as a layer, a Shift+click that moves the
+-- mouse a little would pull the spell off the button, so while such a layer
+-- is on the pickup key is set to none (rearranging: ZBar Content mode or
+-- unlocking the bars). The old key comes back when the layer goes off.
+local PICKUP = "PICKUPACTION"
+local LAYER_KEY = { ctrl = "CTRL", shift = "SHIFT" }
+
+local function PickupConflict(key)
+    for layer, k in pairs(LAYER_KEY) do
+        if k == key and DB().modLayers[layer] then return true end
+    end
+end
+
+-- returns true if it changed the setting (the caller saves the bindings)
+function Mod:UpdatePickupKey()
+    if not (GetModifiedClick and SetModifiedClick) then return false end
+    local db = DB()
+    local cur = GetModifiedClick(PICKUP)
+    if PickupConflict(cur) then
+        db.modSavedPickup = db.modSavedPickup or cur
+        SetModifiedClick(PICKUP, "NONE")
+        ns.Print("Pick Up Action Key set to none while the " .. cur:sub(1, 1) .. cur:sub(2):lower()
+            .. " layer is on, so a spell cannot be dragged off a locked bar by accident. "
+            .. "Rearrange spells with /zbar (Content mode).")
+        return true
+    end
+    local saved = db.modSavedPickup
+    if saved and cur ~= "NONE" then
+        db.modSavedPickup = nil -- changed by the player in the meantime: keep theirs
+    elseif saved and not PickupConflict(saved) then
+        SetModifiedClick(PICKUP, saved)
+        db.modSavedPickup = nil
+        ns.Print("Pick Up Action Key is " .. saved .. " again.")
+        return true
+    end
+    return false
+end
+
 function Mod:SetLayer(layer, on)
     if InCombatLockdown() then ns.Print("Cannot change key bindings in combat.") return false end
     local L = self.LAYERS[layer]
     local changed
     if on then changed = FreeKeys(layer) else changed = RestoreKeys(layer) end
-    if changed then SaveBindings(GetCurrentBindingSet()) end
     DB().modLayers[layer] = on and true or nil
+    if self:UpdatePickupKey() then changed = true end
+    if changed then SaveBindings(GetCurrentBindingSet()) end
     if on then
         ns.Print(L.label .. " layer on - " .. L.frees .. " now go to your buttons.")
     else
@@ -789,6 +830,7 @@ function Mod:Init()
     for _, layer in ipairs(self.ORDER) do
         if db.modLayers[layer] and FreeKeys(layer) then changed = true end
     end
+    if self:UpdatePickupKey() then changed = true end
     if changed then SaveBindings(GetCurrentBindingSet()) end
     self:ApplyAll()
 end
