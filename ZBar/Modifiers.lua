@@ -1054,6 +1054,17 @@ local function PutBack(info, slot)
     ClearCursor()
 end
 
+-- "Flash Heal (Shift) and Kick (Ctrl)" - what a button's layers hold
+local function LayerNames(name)
+    local m = DB().mods[name]
+    if not m then return nil end
+    local parts = {}
+    for _, layer in ipairs({ "shift", "ctrl" }) do
+        if m[layer] then parts[#parts + 1] = Mod:Describe(m[layer]) .. " (" .. Mod.LAYERS[layer].label .. ")" end
+    end
+    return #parts > 0 and table.concat(parts, " and ") or nil
+end
+
 -- "really remove?" - yes / no run the given functions
 local function Confirm(what, extra, yes, no)
     StaticPopup_Show("ZBAR_CONFIRM_REMOVE", what, extra or "", { yes = yes, no = no })
@@ -1070,8 +1081,8 @@ local function DragEnd()
         -- never placed anywhere: thrown away from its own button (unless it
         -- went back onto its own slot)
         if c.originSlot and HasAction(c.originSlot) then return end
-        local layers = Layers(c.origin)
-        Confirm(CursorThing(c.info), layers and "\nIts Ctrl / Shift actions go too." or "",
+        local layers = LayerNames(c.origin)
+        Confirm(CursorThing(c.info) .. " from the bar", layers and ("\nIts Ctrl / Shift actions go too: " .. layers .. ".") or "",
             function()
                 SetLayers(c.origin, nil)
                 Mod:ApplyAll()
@@ -1090,7 +1101,15 @@ local function DragEnd()
     end
     -- the other button's spell (on the cursor after the swap) was thrown away
     local pending = c.pending
-    Confirm(CursorThing(c.info), pending and "\nIts Ctrl / Shift actions go too." or "",
+    local pendingNames
+    if pending then
+        local parts = {}
+        for _, layer in ipairs({ "shift", "ctrl" }) do
+            if pending[layer] then parts[#parts + 1] = Mod:Describe(pending[layer]) .. " (" .. Mod.LAYERS[layer].label .. ")" end
+        end
+        pendingNames = table.concat(parts, " and ")
+    end
+    Confirm(CursorThing(c.info) .. " from the bar", pendingNames and ("\nIts Ctrl / Shift actions go too: " .. pendingNames .. ".") or "",
         function() end,
         function()
             -- back where the drag started (that slot is empty now), with its layers
@@ -1170,7 +1189,7 @@ function Mod:LayersDragStop()
     if to == from then return end
     if not to then
         -- let go off the bars: removed (after asking), like a spell dragged off a bar
-        Confirm("the Ctrl / Shift actions of " .. Label(from), "", function()
+        Confirm((LayerNames(from) or "the Ctrl / Shift actions") .. " from " .. Label(from), "", function()
             SetLayers(from, nil)
             Mod:ApplyAll()
         end)
@@ -1184,7 +1203,7 @@ function Mod:LayersDragStop()
 end
 
 StaticPopupDialogs["ZBAR_CONFIRM_REMOVE"] = {
-    text = "ZBar: remove %s from the bar?%s",
+    text = "ZBar: remove %s?%s",
     button1 = YES or "Yes",
     button2 = NO or "No",
     OnShow = function(self) if ns.SolidPopupOn then ns.SolidPopupOn(self) end end,
