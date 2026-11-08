@@ -740,6 +740,10 @@ local function Proxy(name)
         if slot and GetCursorInfo() and not InCombatLockdown() then PlaceAction(slot) end
     end
     p:SetScript("OnReceiveDrag", PlaceBase)
+    -- no spell of its own: dragging it carries its layer actions
+    p:RegisterForDrag("LeftButton")
+    p:SetScript("OnDragStart", function() Mod:LayersDragStart(name) end)
+    p:SetScript("OnDragStop", function() Mod:LayersDragStop() end)
     p:HookScript("OnMouseUp", function(_, mouse)
         if mouse == "LeftButton" and GetCursorInfo() then PlaceBase() end
     end)
@@ -998,7 +1002,8 @@ end
 local function DragStart(btn, name)
     Debug("start", name, "slot", SlotOf(btn), "cursor", GetCursorInfo(), "unlocked", ns.unlocked)
     if ns.unlocked or not GetCursorInfo() then return end -- ZBar's own unlock mode has its own handling
-    carry = { origin = name, from = name, slot = SlotOf(btn) }
+    local slot = SlotOf(btn)
+    carry = { origin = name, from = name, slot = slot, originSlot = slot, info = { GetCursorInfo() } }
     if lockDeadline then lockDeadline = GetTime() + LOCK_IDLE end
 end
 
@@ -1016,27 +1021,199 @@ local function Dropped(name)
     SetLayers(name, moving)
     carry.from, carry.pending = nil, old
     carry.slot = SlotOf(ns.Bars.info[name].btn)
+    carry.info = { GetCursorInfo() } -- what the other button had (now on the cursor)
     if lockDeadline then lockDeadline = GetTime() + LOCK_IDLE end
     Mod:ApplyAll()
 end
 
 -- the cursor got empty: the drag is over
+-- name of what the cursor held (GetCursorInfo() values)
+local function CursorThing(info)
+    local t, a, b = info[1], info[2], info[3]
+    local name
+    if t == "spell" then name = GetSpellName(a, b or BOOKTYPE_SPELL)
+    elseif t == "macro" then name = GetMacroInfo(a)
+    elseif t == "item" then name = GetItemInfo(a)
+    elseif t == "companion" and GetCompanionInfo then name = select(2, GetCompanionInfo(b, a))
+    elseif t == "equipmentset" then name = a
+    end
+    return name or "this"
+end
+
+-- puts what the cursor held back on a slot
+local function PutBack(info, slot)
+    local t, a, b = info[1], info[2], info[3]
+    ClearCursor()
+    if t == "spell" then PickupSpell(a, b or BOOKTYPE_SPELL)
+    elseif t == "macro" then PickupMacro(a)
+    elseif t == "item" then PickupItem(a)
+    elseif t == "companion" and PickupCompanion then PickupCompanion(b, a)
+    elseif t == "equipmentset" and PickupEquipmentSetByName then PickupEquipmentSetByName(a)
+    end
+    if GetCursorInfo() and slot then PlaceAction(slot) end
+    ClearCursor()
+end
+
+-- "Flash Heal (Shift) and Kick (Ctrl)" - what a button's layers hold
+local function LayerNames(name)
+    local m = DB().mods[name]
+    if not m then return nil end
+    local parts = {}
+    for _, layer in ipairs({ "shift", "ctrl" }) do
+        if m[layer] then parts[#parts + 1] = Mod:Describe(m[layer]) .. " (" .. Mod.LAYERS[layer].label .. ")" end
+    end
+    return #parts > 0 and table.concat(parts, " and ") or nil
+end
+
+-- "really remove?" - yes / no run the given functions
+local function Confirm(what, extra, yes, no)
+    StaticPopup_Show("ZBAR_CONFIRM_REMOVE", what, extra or "", { yes = yes, no = no })
+end
+
+-- the cursor got empty: the drag is over. Something let go off the bars
+-- (the game removes it) is asked about: no puts it back.
 local function DragEnd()
     Debug("end", carry and carry.pending and "with pending layers" or "")
     local c = carry
     carry = nil
-    if not c or not c.pending then return end
-    -- the other button's spell was thrown away: its Ctrl / Shift actions are
-    -- not, they go to the button the drag started from (if it has none now)
-    local into = c.origin
-    if into and not DB().mods[into] then
-        SetLayers(into, c.pending)
-        ns.Print("Ctrl / Shift actions of the removed spell went to " .. Label(into) .. ".")
-    else
-        ns.Print("The Ctrl / Shift actions of the removed spell were removed too.")
+    if not c then return end
+    if c.from then
+        -- never placed anywhere: thrown away from its own button (unless it
+        -- went back onto its own slot)
+        if c.originSlot and HasAction(c.originSlot) then return end
+        local layers = LayerNames(c.origin)
+        Confirm(CursorThing(c.info) .. " from the bar", layers and ("\nIts Ctrl / Shift actions go too: " .. layers .. ".") or "",
+            function()
+                SetLayers(c.origin, nil)
+                Mod:ApplyAll()
+            end,
+            function() PutBack(c.info, c.originSlot) end)
+        return
     end
-    Mod:ApplyAll()
+    if not c.pending and not (c.info and c.info[1]) then return end
+    if c.info and c.info[1] == nil then
+        -- the other button was empty: nothing on the cursor, nothing thrown
+        if c.pending then
+            SetLayers(c.origin, c.pending)
+            Mod:ApplyAll()
+        end
+        return
+    end
+    -- the other button's spell (on the cursor after the swap) was thrown away
+    local pending = c.pending
+    local pendingNames
+    if pending then
+        local parts = {}
+        for _, layer in ipairs({ "shift", "ctrl" }) do
+            if pending[layer] then parts[#parts + 1] = Mod:Describe(pending[layer]) .. " (" .. Mod.LAYERS[layer].label .. ")" end
+        end
+        pendingNames = table.concat(parts, " and ")
+    end
+    Confirm(CursorThing(c.info) .. " from the bar", pendingNames and ("\nIts Ctrl / Shift actions go too: " .. pendingNames .. ".") or "",
+        function() end,
+        function()
+            -- back where the drag started (that slot is empty now), with its layers
+            if c.originSlot and not HasAction(c.originSlot) then PutBack(c.info, c.originSlot) end
+            if pending and not DB().mods[c.origin] then SetLayers(c.origin, pending) end
+            Mod:ApplyAll()
+        end)
 end
+
+-- A button with layer actions but no spell of its own: the game picks up
+-- nothing, so Shift+drag (or a plain drag on unlocked bars) carries its
+-- Ctrl / Shift actions instead. Where the mouse is let go, they swap with
+-- that button's layer actions; the spells stay where they are. Let go off
+-- the bars, they are removed (after asking).
+local layerCarry
+local ghost
+
+local function PickupAllowed()
+    return GetCVar("lockActionBars") ~= "1" or IsModifiedClick("PICKUPACTION")
+end
+
+local function Ghost(name)
+    if not ghost then
+        ghost = CreateFrame("Frame", nil, UIParent)
+        ghost:SetSize(32, 32)
+        ghost:SetFrameStrata("TOOLTIP")
+        ghost.icon = ghost:CreateTexture(nil, "ARTWORK")
+        ghost.icon:SetAllPoints()
+        ghost.icon:SetAlpha(0.8)
+        ghost:SetScript("OnUpdate", function(self)
+            local x, y = GetCursorPosition()
+            local s = UIParent:GetEffectiveScale()
+            self:ClearAllPoints()
+            self:SetPoint("CENTER", UIParent, "BOTTOMLEFT", x / s + 14, y / s - 14)
+        end)
+    end
+    local m = DB().mods[name] or {}
+    local e = m.shift or m.ctrl
+    ghost.icon:SetTexture(e and Mod:Icon(e) or "Interface\\Icons\\INV_Misc_QuestionMark")
+    ghost:Show()
+end
+
+function Mod:LayersDragStart(name)
+    if ns.unlocked or GetCursorInfo() or not DB().mods[name] or not PickupAllowed() then return end
+    layerCarry = name
+    Ghost(name)
+    if lockDeadline then lockDeadline = GetTime() + LOCK_IDLE end
+    Debug("layers start", name)
+end
+
+-- the button (or stand-in) under the mouse; an empty button the game hides
+-- counts too while its bar is shown (its layers can still be filled)
+local function ButtonUnderMouse()
+    local hidden
+    for name, info in pairs(ns.Bars.info) do
+        local btn = info.btn
+        local p = proxies[name]
+        if p and p:IsVisible() then
+            if MouseIsOver(p) then return name end
+        elseif btn and btn:IsVisible() then
+            if MouseIsOver(btn) then return name end
+        elseif btn and info.managed and btn:GetParent() and btn:GetParent():IsVisible()
+            and btn:GetParent() ~= ns.Groups.hiddenParent and MouseIsOver(btn) then
+            hidden = hidden or name
+        end
+    end
+    return hidden
+end
+
+function Mod:LayersDragStop()
+    local from = layerCarry
+    if not from then return end
+    layerCarry = nil
+    if ghost then ghost:Hide() end
+    local to = ButtonUnderMouse()
+    Debug("layers stop", from, "->", to)
+    if to == from then return end
+    if not to then
+        -- let go off the bars: removed (after asking), like a spell dragged off a bar
+        Confirm((LayerNames(from) or "the Ctrl / Shift actions") .. " from " .. Label(from), "", function()
+            SetLayers(from, nil)
+            Mod:ApplyAll()
+        end)
+        return
+    end
+    local moving, old = Layers(from), Layers(to)
+    SetLayers(to, moving)
+    SetLayers(from, old)
+    if lockDeadline then lockDeadline = GetTime() + LOCK_IDLE end
+    self:ApplyAll()
+end
+
+StaticPopupDialogs["ZBAR_CONFIRM_REMOVE"] = {
+    text = "ZBar: remove %s?%s",
+    button1 = YES or "Yes",
+    button2 = NO or "No",
+    OnShow = function(self) if ns.SolidPopupOn then ns.SolidPopupOn(self) end end,
+    OnHide = function(self) if ns.SolidPopupOff then ns.SolidPopupOff(self) end end,
+    OnAccept = function(_, data) if data and data.yes then data.yes() end end,
+    OnCancel = function(_, data) if data and data.no then data.no() end end,
+    timeout = 0,
+    whileDead = true,
+    hideOnEscape = true,
+}
 
 local hooked = {}
 function Mod:HookDrags()
@@ -1044,7 +1221,15 @@ function Mod:HookDrags()
         local btn = info.btn
         if btn and not hooked[btn] and btn:GetScript("OnDragStart") then
             hooked[btn] = true
-            btn:HookScript("OnDragStart", function(self) DragStart(self, name) end)
+            btn:HookScript("OnDragStart", function(self)
+                DragStart(self, name)
+                if not GetCursorInfo() then Mod:LayersDragStart(name) end -- empty slot, layer actions only
+            end)
+            if btn:GetScript("OnDragStop") then
+                btn:HookScript("OnDragStop", function() Mod:LayersDragStop() end)
+            else
+                btn:SetScript("OnDragStop", function() Mod:LayersDragStop() end)
+            end
         end
     end
 end
@@ -1068,9 +1253,11 @@ dragEv:SetScript("OnEvent", function(_, event, slot)
         local found, under
         for name, info in pairs(ns.Bars.info) do
             local btn = info.btn
-            if btn and btn:IsVisible() and SlotOf(btn) == slot then
+            local p = proxies[name] -- an empty button with layer actions shows its stand-in
+            local frame = (btn and btn:IsVisible() and btn) or (p and p:IsVisible() and p)
+            if frame and SlotOf(btn) == slot then
                 found = found or name
-                if MouseIsOver(btn) then under = name end
+                if MouseIsOver(frame) then under = name end
             end
         end
         Debug("target", under or found)
