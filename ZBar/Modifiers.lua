@@ -1045,7 +1045,8 @@ end
 -- A button with layer actions but no spell of its own: the game picks up
 -- nothing, so Shift+drag (or a plain drag on unlocked bars) carries its
 -- Ctrl / Shift actions instead. Where the mouse is let go, they swap with
--- that button's layer actions; the spells stay where they are.
+-- that button's layer actions; the spells stay where they are. Let go off
+-- the bars, they are removed (like a spell dragged off a bar).
 local layerCarry
 local ghost
 
@@ -1108,7 +1109,14 @@ function Mod:LayersDragStop()
     if ghost then ghost:Hide() end
     local to = ButtonUnderMouse()
     Debug("layers stop", from, "->", to)
-    if not to or to == from then return end
+    if to == from then return end
+    if not to then
+        -- let go off the bars: removed, like a spell dragged off a bar
+        SetLayers(from, nil)
+        ns.Print("Ctrl / Shift actions of " .. Label(from) .. " removed.")
+        self:ApplyAll()
+        return
+    end
     local moving, old = Layers(from), Layers(to)
     SetLayers(to, moving)
     SetLayers(from, old)
