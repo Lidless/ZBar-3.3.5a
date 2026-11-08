@@ -696,3 +696,85 @@ function Roles:OnReady()
         self:Switch(role)
     end
 end
+
+------------------------------------------------------------------------
+-- Unspent talent points (Conquest of Azeroth): the game says nothing about
+-- them, so the talent micro button glows while there are points to spend
+-- and its tooltip says how many. Points to spend = the budget of each tree
+-- (all points earned) minus the points spent there.
+------------------------------------------------------------------------
+function Talents:Unspent()
+    if not self:Available() then return nil end
+    local ok, st = pcall(_G.Ex_GetCoATalentState)
+    local cur = self:Current()
+    if not ok or type(st) ~= "table" or not cur then return nil end
+    local cp, sp = self:Points(cur)
+    local c = math.max(0, (tonumber(st.classBudget) or 0) - cp)
+    local s = math.max(0, (tonumber(st.specBudget) or 0) - sp)
+    return c, s
+end
+
+local pointsGlow, pointsC, pointsS = nil, 0, 0
+
+local function PointsText()
+    local parts = {}
+    if pointsC > 0 then parts[#parts + 1] = pointsC .. " class" end
+    if pointsS > 0 then parts[#parts + 1] = pointsS .. " spec" end
+    return table.concat(parts, " and ") .. " talent point" .. ((pointsC + pointsS) > 1 and "s" or "") .. " to spend"
+end
+
+local function CreateGlow()
+    local btn = _G.TalentMicroButton
+    if pointsGlow or not btn then return end
+    local g = btn:CreateTexture(nil, "OVERLAY")
+    g:SetTexture("Interface\\Buttons\\UI-MicroButton-Hilight")
+    g:SetBlendMode("ADD")
+    g:SetAllPoints(btn)
+    g:Hide()
+    -- a soft pulse, like the game's own "something to do here" flash
+    local t = 0
+    local pulse = CreateFrame("Frame", nil, btn)
+    pulse:SetScript("OnUpdate", function(_, elapsed)
+        t = t + elapsed
+        g:SetAlpha(0.35 + 0.65 * math.abs(math.sin(t * 2.5)))
+    end)
+    pulse:Hide()
+    g.pulse = pulse
+    btn:HookScript("OnEnter", function()
+        if pointsC + pointsS > 0 and GameTooltip:IsOwned(btn) then
+            GameTooltip:AddLine("ZBar: " .. PointsText() .. ".", 0.54, 0.96, 0.35)
+            GameTooltip:Show()
+        end
+    end)
+    pointsGlow = g
+end
+
+function Roles:UpdateTalentPoints()
+    local c, s = Talents:Unspent()
+    pointsC, pointsS = c or 0, s or 0
+    CreateGlow()
+    if not pointsGlow then return end
+    if pointsC + pointsS > 0 then
+        pointsGlow:Show()
+        pointsGlow.pulse:Show()
+    else
+        pointsGlow:Hide()
+        pointsGlow.pulse:Hide()
+    end
+end
+
+-- no event tells when points are spent or earned on CoA: look every few
+-- seconds (a cheap table read), and right away on login and level up
+local pointsEv = CreateFrame("Frame")
+pointsEv:RegisterEvent("PLAYER_ENTERING_WORLD")
+pointsEv:RegisterEvent("PLAYER_LEVEL_UP")
+local pointsWait = 0
+pointsEv:SetScript("OnEvent", function()
+    ns.After(1, function() Roles:UpdateTalentPoints() end)
+end)
+pointsEv:SetScript("OnUpdate", function(_, elapsed)
+    pointsWait = pointsWait + elapsed
+    if pointsWait < 3 then return end
+    pointsWait = 0
+    Roles:UpdateTalentPoints()
+end)
