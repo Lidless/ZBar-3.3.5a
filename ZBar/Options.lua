@@ -222,8 +222,19 @@ function panel:refresh()
     profDesc:SetText(coa
         and "Each talent tree keeps its own bars, layout, Ctrl / Shift layers, gear and talents (this character only).\nSwitch here or with the minimap button: left / middle / right click."
         or "No talent trees here: each dual spec keeps its own layout, Ctrl / Shift layers and gear.\nThe game swaps talents and bar contents with the spec itself.")
+    -- points still to spend, when there are any
+    local free = ""
+    if nowT then
+        local c, sp = T:Unspent()
+        if c and sp and c + sp > 0 then
+            local parts = {}
+            if c > 0 then parts[#parts + 1] = c .. " class" end
+            if sp > 0 then parts[#parts + 1] = sp .. " spec" end
+            free = "   |cff8af559" .. table.concat(parts, " / ") .. " to spend|r"
+        end
+    end
     currentText:SetText("Now: " .. R:Label(cur)
-        .. (nowT and ("   |cffaaaaaaTalents: " .. T:Summary(nowT) .. "|r") or ""))
+        .. (nowT and ("   |cffaaaaaaTalents: " .. T:Summary(nowT) .. "|r") or "") .. free)
     mmHide:SetChecked(ns.Minimap:IsHidden())
     local list = R:List()
     for i, s in ipairs(slots) do
@@ -233,12 +244,7 @@ function panel:refresh()
             local r = db.profiles[e.key]
             s.button:SetText(e.key == cur and ("> " .. e.label .. " <") or e.label)
             s.button:Show()
-            local status = (r and r.savedAt) and ("Saved " .. r.savedAt:sub(6)) or "Not saved yet"
-            if r and r.talents and T:Available() then
-                local cp, sp = T:Points(r.talents)
-                status = status .. " | " .. cp .. " / " .. sp .. " points"
-            end
-            s.status:SetText(status)
+            s.status:SetText((r and r.savedAt) and ("Saved " .. r.savedAt:sub(6)) or "Not saved yet")
             s.info:SetText(e.tree and (R:TreeInfo(e.tree) or "") or "")
             UIDropDownMenu_SetText(s.gear, (r and r.gear) or "No gear change")
             s.status:Show() s.info:Show() s.gearLabel:Show() s.gear:Show()
