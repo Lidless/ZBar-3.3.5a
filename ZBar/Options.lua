@@ -109,7 +109,7 @@ local function GearDropdown(i, x, yy)
     dd:SetPoint("TOPLEFT", x - 16, yy)
     UIDropDownMenu_SetWidth(dd, 120)
     UIDropDownMenu_Initialize(dd, function()
-        local key = slots[i].key
+        local key = slots[i] and slots[i].key -- the game runs this once while the column is still being built
         local r = key and ns.Roles:Get(key)
         local cur = r and r.gear
         local function Add(text, value)
