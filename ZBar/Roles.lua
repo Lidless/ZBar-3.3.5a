@@ -462,27 +462,34 @@ function Roles:TreeKind(id)
     return #kinds > 0 and table.concat(kinds, " / ") or nil
 end
 
--- "Agility | Leather | Normal" - primary stats, armor, difficulty
+-- three lines from the game's own spec presentation:
+-- "Primary: Intellect, Spirit" / "Armor limit: Leather" / "Complexity: Medium"
 function Roles:TreeInfo(id)
     local p = Presentation(id)
     if not p then return nil end
-    local parts = {}
+    local lines = {}
     if type(p.PrimaryStats) == "table" then
         local stats = {}
-        for k, v in pairs(p.PrimaryStats) do
-            if type(v) == "string" then stats[#stats + 1] = v
-            elseif type(k) == "string" and v then stats[#stats + 1] = k end
+        local list = {}
+        if #p.PrimaryStats > 0 then
+            for i = 1, #p.PrimaryStats do list[i] = p.PrimaryStats[i] end
+        else
+            for _, v in pairs(p.PrimaryStats) do list[#list + 1] = v end -- not a list: any order
         end
-        table.sort(stats)
-        if #stats > 0 then parts[#parts + 1] = table.concat(stats, ", ") end
+        for _, v in ipairs(list) do
+            if type(v) == "string" and v ~= "" and v ~= "None" then stats[#stats + 1] = v end
+        end
+        if #stats > 0 then lines[#lines + 1] = "Primary: " .. table.concat(stats, ", ") end
     end
     local armor = {}
     for _, a in ipairs(ARMOR) do
         if p[a] == 1 or p[a] == true then armor[#armor + 1] = a end
     end
-    if #armor > 0 then parts[#parts + 1] = table.concat(armor, " / ") end
-    if p.DifficultyRating then parts[#parts + 1] = tostring(p.DifficultyRating) end
-    return #parts > 0 and table.concat(parts, " | ") or nil
+    if #armor > 0 then lines[#lines + 1] = "Armor limit: " .. table.concat(armor, " / ") end
+    if p.DifficultyRating and p.DifficultyRating ~= "" then
+        lines[#lines + 1] = "Complexity: " .. tostring(p.DifficultyRating)
+    end
+    return #lines > 0 and table.concat(lines, "\n") or nil
 end
 
 function Roles:TreeIcon(id)

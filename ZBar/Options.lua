@@ -160,19 +160,20 @@ for i = 1, 3 do
         GameTooltip:Show()
     end)
     s.button:SetScript("OnLeave", function() GameTooltip:Hide() end)
-    s.status = Label("", x, ry - 80, "GameFontDisableSmall")
-    s.info = Label("", x, ry - 94, "GameFontHighlightSmall")
+    s.status = Label("", x, ry - 82, "GameFontDisableSmall")
+    s.info = Label("", x, ry - 100, "GameFontHighlightSmall")
     s.info:SetWidth(180)
-    s.gearLabel = Label("Gear set:", x, ry - 112, "GameFontNormalSmall")
-    s.gear = GearDropdown(i, x, ry - 124)
+    s.info:SetSpacing(3)
+    s.gearLabel = Label("Gear set:", x, ry - 152, "GameFontNormalSmall")
+    s.gear = GearDropdown(i, x, ry - 164)
     slots[i] = s
 end
 
-local saveRoleButton = Button("Save", 220, 16, ry - 162, function()
+local saveRoleButton = Button("Save", 220, 16, ry - 204, function()
     ns.Roles:Save()
     panel:refresh()
 end)
-local reloadRoleButton = Button("Reload", 150, 242, ry - 162, function()
+local reloadRoleButton = Button("Reload", 150, 242, ry - 204, function()
     ns.Roles:Reload()
     panel:refresh()
 end)
@@ -185,26 +186,26 @@ auto:SetScript("OnClick", function(self)
 end)
 
 local mmHide = CreateFrame("CheckButton", "ZBarHideMinimap", panel, "InterfaceOptionsCheckButtonTemplate")
-mmHide:SetPoint("TOPLEFT", 16, ry - 190)
+mmHide:SetPoint("TOPLEFT", 16, ry - 234)
 _G[mmHide:GetName() .. "Text"]:SetText("Hide minimap button")
 mmHide:SetScript("OnClick", function(self)
     if ns.db then ns.Minimap:SetHidden(self:GetChecked()) end
 end)
 
 -- custom (server specific) bars: hide only
-Label("Custom Bars (hide only - moving and scaling stay in their own menu)", 16, ry - 222, "GameFontNormalSmall")
+Label("Custom Bars (hide only - moving and scaling stay in their own menu)", 16, ry - 268, "GameFontNormalSmall")
 -- up to 4 bars, two per row; filled in by refresh with whatever is found
 local customChecks = {}
 for i = 1, 4 do
     local cb = CreateFrame("CheckButton", "ZBarCustomHide" .. i, panel, "InterfaceOptionsCheckButtonTemplate")
-    cb:SetPoint("TOPLEFT", 16 + ((i - 1) % 2) * 300, ry - 234 - math.floor((i - 1) / 2) * 24)
+    cb:SetPoint("TOPLEFT", 16 + ((i - 1) % 2) * 300, ry - 282 - math.floor((i - 1) / 2) * 26)
     cb:SetScript("OnClick", function(self)
         if ns.db and self.barName then ns.CustomBars:SetHidden(self.barName, self:GetChecked()) end
     end)
     cb:Hide()
     customChecks[i] = cb
 end
-local customNone = Label("No custom bars found on this character.", 20, ry - 240, "GameFontDisableSmall")
+local customNone = Label("No custom bars found on this character.", 20, ry - 288, "GameFontDisableSmall")
 
 ------------------------------------------------------------------------
 function panel:refresh()
