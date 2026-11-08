@@ -740,6 +740,10 @@ local function Proxy(name)
         if slot and GetCursorInfo() and not InCombatLockdown() then PlaceAction(slot) end
     end
     p:SetScript("OnReceiveDrag", PlaceBase)
+    -- no spell of its own: dragging it carries its layer actions
+    p:RegisterForDrag("LeftButton")
+    p:SetScript("OnDragStart", function() Mod:LayersDragStart(name) end)
+    p:SetScript("OnDragStop", function() Mod:LayersDragStop() end)
     p:HookScript("OnMouseUp", function(_, mouse)
         if mouse == "LeftButton" and GetCursorInfo() then PlaceBase() end
     end)
@@ -1038,13 +1042,85 @@ local function DragEnd()
     Mod:ApplyAll()
 end
 
+-- A button with layer actions but no spell of its own: the game picks up
+-- nothing, so Shift+drag (or a plain drag on unlocked bars) carries its
+-- Ctrl / Shift actions instead. Where the mouse is let go, they swap with
+-- that button's layer actions; the spells stay where they are.
+local layerCarry
+local ghost
+
+local function PickupAllowed()
+    return GetCVar("lockActionBars") ~= "1" or IsModifiedClick("PICKUPACTION")
+end
+
+local function Ghost(name)
+    if not ghost then
+        ghost = CreateFrame("Frame", nil, UIParent)
+        ghost:SetSize(32, 32)
+        ghost:SetFrameStrata("TOOLTIP")
+        ghost.icon = ghost:CreateTexture(nil, "ARTWORK")
+        ghost.icon:SetAllPoints()
+        ghost.icon:SetAlpha(0.8)
+        ghost:SetScript("OnUpdate", function(self)
+            local x, y = GetCursorPosition()
+            local s = UIParent:GetEffectiveScale()
+            self:ClearAllPoints()
+            self:SetPoint("CENTER", UIParent, "BOTTOMLEFT", x / s + 14, y / s - 14)
+        end)
+    end
+    local m = DB().mods[name] or {}
+    local e = m.shift or m.ctrl
+    ghost.icon:SetTexture(e and Mod:Icon(e) or "Interface\\Icons\\INV_Misc_QuestionMark")
+    ghost:Show()
+end
+
+function Mod:LayersDragStart(name)
+    if ns.unlocked or GetCursorInfo() or not DB().mods[name] or not PickupAllowed() then return end
+    layerCarry = name
+    Ghost(name)
+    if lockDeadline then lockDeadline = GetTime() + LOCK_IDLE end
+    Debug("layers start", name)
+end
+
+-- the button (or stand-in) under the mouse
+local function ButtonUnderMouse()
+    for name, info in pairs(ns.Bars.info) do
+        local p = proxies[name]
+        local frame = (p and p:IsVisible()) and p or info.btn
+        if frame and frame:IsVisible() and MouseIsOver(frame) then return name end
+    end
+end
+
+function Mod:LayersDragStop()
+    local from = layerCarry
+    if not from then return end
+    layerCarry = nil
+    if ghost then ghost:Hide() end
+    local to = ButtonUnderMouse()
+    Debug("layers stop", from, "->", to)
+    if not to or to == from then return end
+    local moving, old = Layers(from), Layers(to)
+    SetLayers(to, moving)
+    SetLayers(from, old)
+    if lockDeadline then lockDeadline = GetTime() + LOCK_IDLE end
+    self:ApplyAll()
+end
+
 local hooked = {}
 function Mod:HookDrags()
     for name, info in pairs(ns.Bars.info) do
         local btn = info.btn
         if btn and not hooked[btn] and btn:GetScript("OnDragStart") then
             hooked[btn] = true
-            btn:HookScript("OnDragStart", function(self) DragStart(self, name) end)
+            btn:HookScript("OnDragStart", function(self)
+                DragStart(self, name)
+                if not GetCursorInfo() then Mod:LayersDragStart(name) end -- empty slot, layer actions only
+            end)
+            if btn:GetScript("OnDragStop") then
+                btn:HookScript("OnDragStop", function() Mod:LayersDragStop() end)
+            else
+                btn:SetScript("OnDragStop", function() Mod:LayersDragStop() end)
+            end
         end
     end
 end
@@ -1068,9 +1144,11 @@ dragEv:SetScript("OnEvent", function(_, event, slot)
         local found, under
         for name, info in pairs(ns.Bars.info) do
             local btn = info.btn
-            if btn and btn:IsVisible() and SlotOf(btn) == slot then
+            local p = proxies[name] -- an empty button with layer actions shows its stand-in
+            local frame = (btn and btn:IsVisible() and btn) or (p and p:IsVisible() and p)
+            if frame and SlotOf(btn) == slot then
                 found = found or name
-                if MouseIsOver(btn) then under = name end
+                if MouseIsOver(frame) then under = name end
             end
         end
         Debug("target", under or found)
