@@ -14,7 +14,7 @@
 --                db.modSavedBinds = { [key] = original binding }
 --                db.modSavedPickup = the Pick Up Action Key before a layer took it
 -- entry: { t = "spell", name } | { t = "macro", name } | { t = "item", id } | { t = "pet", index }
--- The mods are also part of the role profiles.
+-- The mods are also part of the talent tree profiles.
 local _, ns = ...
 local Mod = {}
 ns.Modifiers = Mod
@@ -1290,7 +1290,7 @@ function Mod:Init()
     self:UpdateLock()
 end
 
--- role profiles
+-- talent tree profiles
 function Mod:Snapshot()
     return ns.DeepCopy(DB().mods)
 end

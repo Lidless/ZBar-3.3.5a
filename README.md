@@ -33,7 +33,7 @@ Azeroth and Classless realms), works on any 3.3.5a client.
 - Alt is not touched: it stays the game's self-cast key.
 - While a layer uses the game's *Pick Up Action Key* (Shift by default), that key is set to none, so a Shift+click cannot drag a spell off a locked bar by accident. To move spells anyway, click the small **lock** under the main bar's page number: Shift+drag works again, and a moved spell takes its Ctrl / Shift actions with it (a swap if the other button is not empty). A button with only Ctrl / Shift actions (no spell of its own) can be dragged the same way: its actions swap with the other button's. Anything let go off the bars asks first whether to remove it (No puts it back, with its Ctrl / Shift actions). It locks itself again when combat starts or after 2 minutes without dragging. Or use `/zbar` (Content mode). The old key comes back when the layer is turned off.
 - **Windows and the Shift layer:** Windows has two keyboard helpers that react to Shift - **Sticky keys** (pressing Shift 5 times pops up a window that can pull you out of the game) and **Filter keys** (holding right Shift for 8 seconds turns it on, then quick key presses can be ignored). In *Settings > Accessibility > Keyboard* open the **Sticky keys** and the **Filter keys** menu and turn **every option inside those two menus** off (the rest of the Keyboard page can stay as it is). Turning off only their main switch is **not enough**: Windows can still pop up if an option below it is on (e.g. the keyboard shortcut, or "Lock shortcut keys when pressed twice in a row", which would make Shift stay pressed). Or use only the Ctrl layer. ZBar shows this the first time you turn the Shift layer on.
-- Saved per character and in each role profile.
+- Saved per character and in each talent tree profile.
 
 **Macro builder** (*Interface > AddOns > ZBar > Macro Builder*, or `/zbar macro`)
 - Click a macro together instead of typing it: spells from a list (spellbook with or without cooldown, pet spells, usable items - with search, like in WeakAuras Simple Remastered) or dragged from the spellbook.
@@ -53,21 +53,25 @@ Azeroth and Classless realms), works on any 3.3.5a client.
 - Hide them from the bar's own right-click menu (**Hide (ZBar)**), from unlock mode, or in the options.
 
 **Layout** (on the toolbar that opens with `/zbar` or Unlock Bars)
-- **Save Layout Only / Restore Layout Only**: positions only, not tied to a role.
+- **Save Layout Only / Restore Layout Only**: positions only, not tied to a talent tree.
 - **Undo** the last 15 moves, resizes and hides (this session).
 - **Factory Reset**: every bar back to its Blizzard position.
 
-**Role profiles** (Tank / DPS / Healer, per character)
-- Each role keeps its own bar positions, **bar contents** (spells, macros, items, mounts) and an optional **gear set** (Equipment Manager).
-- Switching role loads all of it. Spells the new spec does not know are skipped and listed in chat.
-- Auto-save when switching roles (unlearned talent spells removed by a respec are kept in the profile).
-- Dual spec: optionally switch role automatically with Spec 1 / Spec 2.
-- **Talents (Conquest of Azeroth, optional)**: with "Save talents with roles" on, a manual role save also stores your talent build. Switching to a role with a different build asks first (**Change Talents** / **Cancel** - Cancel keeps your current role, also in Threat Plates); talents and bars belong together, since talent spells are on the bars. The build is loaded through the talent window's own Import and Save Changes, and the bars are loaded after the server confirmed it, so new talent spells land on them too. If the talents cannot be loaded (time-out), nothing is half switched: you stay in your old role with its layout, layers and talents, and chat says "Role switch failed (timed out), please try again." The automatic save while switching never overwrites talents. The options show each role's build (spec, class / spec points, talent names in the tooltip).
-- **Unspent talent points (Conquest of Azeroth)**: the game does not tell you, so the talent micro button glows while you have points to spend, and its tooltip says how many (class / spec).
-- **Threat Plates link**: if the reworked Threat Plates with the Tank/DPS/Healer selector is installed, it is the boss - switching role there switches ZBar too, and the other way round.
+**Talent tree profiles** (Conquest of Azeroth, per character)
+- One profile per talent tree of your class, shown with its kind: e.g. *Slayer - Melee*, *Infernal - Caster*, *Tyrant - Tank* (read from the game's own spec data, with primary stats, armor and difficulty).
+- Each tree keeps its own bar positions, **bar contents** (spells, macros, items, mounts), Ctrl / Shift layers, an optional **gear set** (Equipment Manager) and its **talent build**.
+- Switching asks first (**Change Talents** / **Cancel**). Talents load first through the talent window's own Import and Save Changes, then the bars, so the tree's talent spells land on them too. If the talents cannot be loaded (time-out), nothing is half switched.
+- A tree that was never saved starts empty (all its points to spend - the talent button glows); your bars stay as they are until you set them up and save.
+- Switched trees in the game's own talent window? ZBar follows: the old tree's bars are saved, the new tree's bars loaded.
+- Auto-save when switching refreshes trees that were saved before.
+- **Unspent talent points**: the game does not tell you, so the talent micro button glows while you have points to spend, and its tooltip says how many (class / spec).
+
+**Dual spec profiles** (Classless realm: no talent trees)
+- Each dual spec keeps its own bar positions, Ctrl / Shift layers and gear set, loaded when you change spec. The game swaps talents and bar contents with the spec itself.
 
 **Minimap button** (can be hidden in the options)
-- Left click: DPS. Middle click: Tank. Right click: Healer. Alt+right click: options. Drag: move. (Unlocking the bars: `/zbar` or the options.)
+- Conquest of Azeroth: left / middle / right click switches to the 1st / 2nd / 3rd talent tree; the tooltip shows which is which. Alt+right click: options. Drag: move.
+- Classless: click opens the options.
 
 ## Commands
 
@@ -78,16 +82,16 @@ Azeroth and Classless realms), works on any 3.3.5a client.
 | `/zbar restore` | restore the layout-only save |
 | `/zbar undo` | undo the last move / resize / hide |
 | `/zbar reset` | factory reset (reloads the UI) |
-| `/zbar role tank\|dps\|healer` | switch role |
-| `/zbar saverole` | save layout + bars to the current role |
-| `/zbar reloadrole` | load the current role again |
+| `/zbar tree 1-3 \| name` | switch talent tree (e.g. `/zbar tree infernal`) |
+| `/zbar savetree` | save layout, bars, layers and talents to the current tree |
+| `/zbar reloadtree` | load the current tree's saved bars again |
 | `/zbar options` | open the options (Interface > AddOns > ZBar) |
 | `/zbar layers` | set up the Ctrl / Shift layers |
 | `/zbar macro` | open the macro builder |
 
 ## Notes
 
-- Nothing can be moved or switched in combat (a WoW restriction). Role switches requested in combat run when combat ends.
+- Nothing can be moved or switched in combat (a WoW restriction). Talent tree switches are not possible in combat.
 - Settings are saved per character (`ZBarCharDB`).
 
 ## Credits

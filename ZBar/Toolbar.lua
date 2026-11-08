@@ -66,8 +66,8 @@ undoButton:SetScript("OnEnter", function(self)
     GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
     GameTooltip:SetText("Undo")
     GameTooltip:AddLine("Undo the last move, resize or hide (this session only).", 1, 1, 1, true)
-    GameTooltip:AddLine("After a role switch only the bar layout goes back, not the bar contents, Ctrl / Shift layers or gear. "
-        .. "Switch back to the previous role to load those.", 1, 0.82, 0, true)
+    GameTooltip:AddLine("After a talent tree / profile switch only the bar layout goes back, not the bar contents, Ctrl / Shift layers or gear. "
+        .. "Switch back to the previous tree to load those.", 1, 0.82, 0, true)
     GameTooltip:Show()
 end)
 undoButton:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -80,8 +80,8 @@ function Toolbar:UpdateUndo()
 end
 
 function Toolbar:Open()
-    local role = ns.db and ns.db.currentRole
-    title:SetText("ZBar - bars unlocked" .. (role and ("  (Role: " .. role .. ")") or ""))
+    local key = ns.db and ns.Roles:Current()
+    title:SetText("ZBar - bars unlocked" .. (key and ("  (" .. ns.Roles:Label(key) .. ")") or ""))
     UpdateTexts()
     self:UpdateUndo()
     self:Show()
@@ -110,11 +110,26 @@ SlashCmdList.ZBAR = function(msg)
         ns.Layout:Undo()
     elseif cmd == "reset" then
         StaticPopup_Show("ZBAR_FACTORY_RESET")
-    elseif cmd == "role" then
-        ns.Roles:Request((msg or ""):match("^%s*%S+%s+(%S+)"))
-    elseif cmd == "saverole" then
+    elseif cmd == "tree" or cmd == "role" then
+        -- /zbar tree 2   or   /zbar tree infernal
+        local arg = ((msg or ""):match("^%s*%S+%s+(.-)%s*$") or ""):lower()
+        local list, pick = ns.Roles:List(), nil
+        pick = list[tonumber(arg) or 0]
+        if not pick then
+            for _, e in ipairs(list) do
+                if e.name:lower() == arg then pick = e end
+            end
+        end
+        if pick then
+            ns.Roles:Switch(pick.key)
+        else
+            local names = {}
+            for i, e in ipairs(list) do names[#names + 1] = i .. " = " .. e.label end
+            ns.Print("Usage: /zbar tree 1-3 or name (" .. table.concat(names, ", ") .. ")")
+        end
+    elseif cmd == "saverole" or cmd == "savetree" then
         ns.Roles:Save()
-    elseif cmd == "reloadrole" then
+    elseif cmd == "reloadrole" or cmd == "reloadtree" then
         ns.Roles:Reload()
     elseif cmd == "layers" or cmd == "modifiers" then
         ns.Modifiers:OpenSetup()
@@ -130,11 +145,11 @@ SlashCmdList.ZBAR = function(msg)
         ns.Print("/zbar - unlock / lock the bars")
         ns.Print("/zbar save - save the layout only (positions, not bar contents)")
         ns.Print("/zbar restore - restore the layout-only save")
-        ns.Print("/zbar undo - undo the last move / resize / hide (after a role switch: layout only, not bar contents / layers)")
+        ns.Print("/zbar undo - undo the last move / resize / hide (after a tree switch: layout only, not bar contents / layers)")
         ns.Print("/zbar reset - back to the default Blizzard positions")
-        ns.Print("/zbar role tank | dps | healer - switch role")
-        ns.Print("/zbar saverole - save layout + bars to the current role")
-        ns.Print("/zbar reloadrole - load the current role's saved layout + bars again")
+        ns.Print("/zbar tree 1-3 | name - switch talent tree (Conquest of Azeroth)")
+        ns.Print("/zbar savetree - save layout, bars, layers and talents to the current tree (or dual spec)")
+        ns.Print("/zbar reloadtree - load the current tree's saved layout + bars again")
         ns.Print("/zbar options - open the ZBar options")
         ns.Print("/zbar layers - set up the Ctrl / Shift layers")
         ns.Print("/zbar macro - open the macro builder")

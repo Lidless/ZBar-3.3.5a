@@ -1,35 +1,30 @@
--- ZBar roles: Tank / DPS / Healer profiles per character.
--- A profile holds the bar layout (positions, groups, sizes, hidden parts),
--- the contents of all 120 action slots and, optionally, a gear set.
+-- ZBar profiles, per character.
+-- Conquest of Azeroth: one profile per talent tree of the class (e.g. Slayer,
+-- Infernal, Tyrant). A profile keeps the bar layout (positions, groups,
+-- sizes, hidden parts), the contents of all 120 action slots, the Ctrl /
+-- Shift layers, a gear set and the talent build of that tree. Switching
+-- loads the talents first, then the bars (talent spells sit on them).
+-- Classless realm (no talent trees): one profile per dual spec (Spec 1 /
+-- Spec 2) with layout, layers and gear - the game swaps talents and bar
+-- contents with the spec by itself.
 local _, ns = ...
 local Roles = {}
 ns.Roles = Roles
 
-Roles.list = { "Tank", "DPS", "Healer" }
-local NAMES = { tank = "Tank", dps = "DPS", healer = "Healer", heal = "Healer" }
 local NUM_SLOTS = 120
 local BOOK = BOOKTYPE_SPELL or "spell"
 
 local function DB()
     local db = ns.db
-    db.roles = db.roles or {}
-    db.specRole = db.specRole or {}
+    db.profiles = db.profiles or {}
     if db.roleAutoSave == nil then db.roleAutoSave = true end
     return db
 end
 Roles.DB = DB
 
-function Roles:Normalize(role)
-    return role and NAMES[role:lower()]
-end
-
-function Roles:Current()
-    return ns.db and ns.db.currentRole
-end
-
 -- nil until the character's saved data is loaded (the options panel is built earlier)
-function Roles:Get(role)
-    return ns.db and DB().roles[role]
+function Roles:Get(key)
+    return ns.db and key and DB().profiles[key]
 end
 
 local function Refresh()
@@ -389,312 +384,342 @@ function Talents:Preview(t)
     if not wasShown then tr:Hide() end
 end
 
-StaticPopupDialogs["ZBAR_ROLE_TALENTS"] = {
-    text = "ZBar: switch to %s?\n\nThis also changes your talents to the build saved with this role:\n"
-        .. "|cffffd100%s|r\n\nTalents load first, then the bars (talent spells are on them).\n"
-        .. "Cancel keeps your current role.",
+StaticPopupDialogs["ZBAR_TREE_SWITCH"] = {
+    text = "ZBar: switch to %s?\n\n%s",
     button1 = "Change Talents",
     button2 = CANCEL,
     OnShow = function(self) if ns.SolidPopupOn then ns.SolidPopupOn(self) end end,
     OnHide = function(self) if ns.SolidPopupOff then ns.SolidPopupOff(self) end end,
     OnAccept = function(self, data) if data then data.yes() end end,
-    OnCancel = function(self, data) if data then data.no() end end,
+    OnCancel = function(self, data) if data and data.no then data.no() end end,
     timeout = 0,
     whileDead = false,
     hideOnEscape = true,
 }
 
 ------------------------------------------------------------------------
--- Save / switch
+-- Profiles: which ones there are, which one is active
+------------------------------------------------------------------------
+local ROLE_FLAGS = {
+    { "Tank", "Tank" }, { "Healer", "Healer" }, { "MeleeDPS", "Melee" }, { "RangedDPS", "Ranged" },
+    { "CasterDPS", "Caster" }, { "Support", "Support" },
+}
+local ARMOR = { "Plate", "Mail", "Leather", "Cloth" }
+
+local function Presentation(id)
+    local p = _G.CoA and _G.CoA.TalentSpecPresentation
+    return type(p) == "table" and p[id] or nil
+end
+
+-- "coa": the character has Conquest of Azeroth talent trees; "spec": dual spec only
+function Roles:Mode()
+    local t = Talents:Available() and Talents:Current()
+    local s = t and Spec(t.spec)
+    if s and s.class == t.class then return "coa" end
+    return "spec"
+end
+
+-- the profiles of this character, in order: { key, name, label, tree }
+function Roles:List()
+    local list = {}
+    if self:Mode() == "coa" then
+        local cls = Talents:Current().class
+        for id, s in pairs(_G.CoA.TalentData.specs) do
+            if type(s) == "table" and s.class == cls then
+                list[#list + 1] = { key = "tree" .. id, tree = id, name = s.name or ("Tree " .. id), order = s.order or id }
+            end
+        end
+        table.sort(list, function(a, b) return a.order < b.order end)
+        for _, e in ipairs(list) do
+            local kind = self:TreeKind(e.tree)
+            e.label = kind and (e.name .. " - " .. kind) or e.name
+        end
+    else
+        for i = 1, 2 do list[i] = { key = "spec" .. i, name = "Spec " .. i, label = "Spec " .. i } end
+    end
+    return list
+end
+
+function Roles:Entry(key)
+    for _, e in ipairs(self:List()) do
+        if e.key == key then return e end
+    end
+end
+
+function Roles:Label(key)
+    local e = key and self:Entry(key)
+    return e and e.label or tostring(key)
+end
+
+-- Melee / Caster / Tank ... from the game's own spec presentation
+function Roles:TreeKind(id)
+    local p = Presentation(id)
+    if not p then return nil end
+    local kinds = {}
+    for _, f in ipairs(ROLE_FLAGS) do
+        if p[f[1]] == 1 or p[f[1]] == true then kinds[#kinds + 1] = f[2] end
+    end
+    return #kinds > 0 and table.concat(kinds, " / ") or nil
+end
+
+-- "Agility | Leather | Normal" - primary stats, armor, difficulty
+function Roles:TreeInfo(id)
+    local p = Presentation(id)
+    if not p then return nil end
+    local parts = {}
+    if type(p.PrimaryStats) == "table" then
+        local stats = {}
+        for k, v in pairs(p.PrimaryStats) do
+            if type(v) == "string" then stats[#stats + 1] = v
+            elseif type(k) == "string" and v then stats[#stats + 1] = k end
+        end
+        table.sort(stats)
+        if #stats > 0 then parts[#parts + 1] = table.concat(stats, ", ") end
+    end
+    local armor = {}
+    for _, a in ipairs(ARMOR) do
+        if p[a] == 1 or p[a] == true then armor[#armor + 1] = a end
+    end
+    if #armor > 0 then parts[#parts + 1] = table.concat(armor, " / ") end
+    if p.DifficultyRating then parts[#parts + 1] = tostring(p.DifficultyRating) end
+    return #parts > 0 and table.concat(parts, " | ") or nil
+end
+
+function Roles:TreeIcon(id)
+    local s = Spec(id)
+    return s and s.icon and ("Interface\\Icons\\" .. s.icon) or nil
+end
+
+-- the active profile: the talent tree in use, or the active dual spec
+function Roles:Current()
+    if not ns.db then return nil end
+    if self:Mode() == "coa" then
+        return "tree" .. Talents:Current().spec
+    end
+    return "spec" .. (GetActiveTalentGroup and GetActiveTalentGroup() or 1)
+end
+
+------------------------------------------------------------------------
+-- Save / load
 ------------------------------------------------------------------------
 -- merge: automatic save while switching. A respec removes unlearned talent
 -- spells from the bars, so slots that are empty now keep what was saved before.
-function Roles:Save(role, quiet, merge)
-    role = role or self:Current()
-    if not role then
-        ns.Print("Pick a role first (Tank, DPS or Healer).")
-        return
-    end
-    if InCombatLockdown() then ns.Print("Cannot save a role in combat.") return end
+function Roles:Save(key, quiet, merge)
+    key = key or self:Current()
+    if not key then return end
+    if InCombatLockdown() then ns.Print("Cannot save in combat.") return end
     local db = DB()
-    local r = db.roles[role] or {}
+    local r = db.profiles[key] or {}
     r.layout = ns.DeepCopy(ns.db.layout)
     if ns.Modifiers then r.mods = ns.Modifiers:Snapshot() end
-    -- talents only on a manual save: the automatic save runs while switching,
-    -- possibly right after a respec, and would store the new build in the old role
-    if not merge and db.roleTalents and Talents:Available() then
-        r.talents = Talents:Current()
-    end
-    local now = self:CaptureActions()
-    if merge and r.actions then
-        for slot = 1, NUM_SLOTS do
-            if now[slot] then r.actions[slot] = now[slot] end
+    if key:sub(1, 4) == "tree" then
+        -- the build of the tree in use (never another tree's)
+        local t = Talents:Current()
+        if t and ("tree" .. t.spec) == key then r.talents = t end
+        local now = self:CaptureActions()
+        if merge and r.actions then
+            for slot = 1, NUM_SLOTS do
+                if now[slot] then r.actions[slot] = now[slot] end
+            end
+        else
+            r.actions = now
         end
-    else
-        r.actions = now
     end
     r.savedAt = date("%Y-%m-%d %H:%M")
-    db.roles[role] = r
-    db.currentRole = role
-    if not quiet then ns.Print(role .. " role saved (bar positions and contents).") end
+    db.profiles[key] = r
+    if not quiet then ns.Print(self:Label(key) .. " saved (bar positions" .. (r.actions and ", bars" or "")
+        .. ", layers" .. (r.talents and ", talents" or "") .. ").") end
     Refresh()
 end
 
--- load the current role's saved layout and bars again
-function Roles:Reload()
-    local role = self:Current()
-    if not role then
-        ns.Print("Pick a role first (Tank, DPS or Healer).")
-        return
-    end
-    self:Switch(role)
-end
-
--- fromSpec: switched by a dual spec change; the server has already swapped
--- the bar contents, so only the old role's layout may be saved, not its bars
-function Roles:Switch(role, fromSpec)
-    role = self:Normalize(role) or role
-    if not (role == "Tank" or role == "DPS" or role == "Healer") then
-        ns.Print("Usage: /zbar role tank | dps | healer")
-        return
-    end
-    if InCombatLockdown() then ns.Print("Cannot switch roles in combat.") return end
-    local db = DB()
-    local cur = db.currentRole
-    local r = db.roles[role]
-
-    -- a role with its own talent build: ask before anything changes
-    -- (not on a dual spec change: the game swaps the talents itself then)
-    local want = not fromSpec and db.roleTalents and r and r.actions and r.talents
-        and Talents:Available() and r.talents
-    local now = want and Talents:Current()
-    if want and now and not Talents:Same(now, want) then
-        StaticPopup_Show("ZBAR_ROLE_TALENTS", role, Talents:Summary(want), {
-            yes = function()
-                if InCombatLockdown() then
-                    ns.Print("Cannot change talents in combat - role not switched.")
-                    Roles:KeepRole(cur)
-                    return
-                end
-                Roles:DoSwitch(role, fromSpec, want)
-            end,
-            no = function() Roles:KeepRole(cur) end,
-        })
-        return
-    end
-    self:DoSwitch(role, fromSpec)
-end
-
--- cancelled: stay in the current role (and put Threat Plates back on it)
-function Roles:KeepRole(cur, quiet)
-    if not quiet then
-        ns.Print("Role not switched" .. (cur and (" - still " .. cur) or "") .. ".")
-    end
-    if cur and self:TPLinked() then
-        local TP = { Tank = "TANK", DPS = "DPS", Healer = "HEALER" }
-        if _G.TidyPlatesThreat:GetRole() ~= TP[cur] then
-            _G.TidyPlatesThreat:SetRole(TP[cur]) -- same role as ZBar's: the hook does nothing
-        end
-    end
-    Refresh()
-end
-
--- talents: the build to load first (only after the player said yes)
-function Roles:DoSwitch(role, fromSpec, talents)
-    local db = DB()
-    local cur = db.currentRole
-    -- what to go back to if the talents fail: nothing half switched
-    local before = talents and {
-        layout = ns.DeepCopy(ns.db.layout),
-        mods = ns.Modifiers and ns.Modifiers:Snapshot(),
-        talents = Talents:Current(),
-        oldProfile = cur and db.roles[cur] and ns.DeepCopy(db.roles[cur]),
-    }
-
-    if cur and cur ~= role and db.roleAutoSave then
-        if fromSpec then
-            if db.roles[cur] then db.roles[cur].layout = ns.DeepCopy(ns.db.layout) end
-        else
-            self:Save(cur, true, true)
-        end
-    end
-    db.currentRole = role
-
-    local r = db.roles[role]
-    if not r or not r.actions then
-        ns.Print(role .. " role is not saved yet - your bars were left as they are. "
-            .. "Set them up and press Save Role (or /zbar saverole).")
-        if r and r.gear then self:EquipSet(r.gear) end
-        Refresh()
-        return
-    end
-
-    ns.Layout:PushUndo(nil, nil, "Note: this undid a role switch - only the bar layout went back, "
-        .. "the bar contents, Ctrl / Shift layers and gear did not. Switch back to the previous role to load those.")
+-- puts a profile's layout, layers, bars (tree profiles) and gear on
+local function LoadProfile(key, r, quiet)
+    ns.Layout:PushUndo(nil, nil, "Note: this undid a profile switch - only the bar layout went back, "
+        .. "the bar contents, Ctrl / Shift layers and gear did not.")
     local layout = ns.DeepCopy(r.layout)
     ns.Blocks:Merge(layout, ns.db.layout)
     ns.db.layout = layout
     ns.Layout:Apply()
-
     if r.mods and ns.Modifiers then ns.Modifiers:Load(r.mods) end
-
-    -- bars come after the talents, so spells of a new build are already known
-    local function Finish()
-        if InCombatLockdown() then
-            ns.RunOOC("rolefinish", Finish)
-            return
-        end
-        local missing, lostMacros = self:LoadActions(r.actions)
-        self:EquipSet(r.gear)
-        ns.Print("Switched to " .. role .. ".")
-        if #missing > 0 then
-            ns.Print("Not available, slot left unchanged: " .. table.concat(missing, ", "))
-        end
-        for _, line in ipairs(lostMacros) do ns.Print(line) end
-        Refresh()
+    local missing, lostMacros = {}, {}
+    if r.actions then missing, lostMacros = Roles:LoadActions(r.actions) end
+    Roles:EquipSet(r.gear)
+    if not quiet then ns.Print("Switched to " .. Roles:Label(key) .. ".") end
+    if #missing > 0 then
+        ns.Print("Not available, slot left unchanged: " .. table.concat(missing, ", "))
     end
-
-    if talents then
-        Talents:Apply(talents, function(ok, reason)
-            if ok then
-                ns.Print("Talents changed: " .. Talents:Summary(talents) .. ".")
-                Finish()
-            else
-                self:RevertSwitch(cur, before, reason)
-            end
-        end)
-        return
-    end
-    Finish()
+    for _, line in ipairs(lostMacros) do ns.Print(line) end
 end
 
--- the talents of the new role did not load: go back to the old role as it was
--- (bars were not touched yet; layout, layers, role and talents go back)
-function Roles:RevertSwitch(cur, before, reason)
+-- load the active profile's layout and bars again (and its talents, if they differ)
+function Roles:Reload()
+    self:Switch(self:Current())
+end
+
+-- Conquest of Azeroth: switch talent tree (minimap button, options, /zbar tree)
+function Roles:Switch(key)
+    if not key then return end
+    if InCombatLockdown() then ns.Print("Cannot switch in combat.") return end
+    if self:Mode() ~= "coa" then
+        ns.Print("No talent trees on this character: profiles follow the dual spec.")
+        return
+    end
+    local e = self:Entry(key)
+    if not e then ns.Print("Unknown talent tree.") return end
+    local r = self:Get(key)
+    local now = Talents:Current()
+    local want = r and r.talents
+    local fresh = not want
+    if fresh then
+        -- never saved: an empty build of that tree (all its points to spend)
+        want = { version = _G.CoA.TalentData.version, class = now.class, spec = e.tree, ranks = {} }
+    end
+    if now.spec == e.tree and Talents:Same(now, want) then
+        -- same tree, same talents: only the bars
+        if r and r.layout then
+            self.switching = true
+            LoadProfile(key, r)
+            self.switching = nil
+        else
+            ns.Print(e.label .. " is not saved yet: set up your bars and press Save.")
+        end
+        Refresh()
+        return
+    end
+    if now.spec == e.tree and fresh then
+        ns.Print(e.label .. " is not saved yet: set up your bars and press Save.")
+        return
+    end
+    local text = fresh
+        and ("This tree is not saved yet: it starts with no talent points spent\n(the talent button glows until you spend them).\nYour bars stay as they are - set them up and press Save.")
+        or ("This also loads the talents saved with this tree:\n|cffffd100" .. Talents:Summary(want)
+            .. "|r\n\nTalents load first, then the bars (talent spells are on them).")
+    StaticPopup_Show("ZBAR_TREE_SWITCH", e.label, text, {
+        yes = function()
+            if InCombatLockdown() then ns.Print("Cannot change talents in combat.") return end
+            Roles:DoSwitch(key, want, fresh)
+        end,
+    })
+end
+
+function Roles:DoSwitch(key, talents, fresh)
     local db = DB()
-    local function Revert()
-        if InCombatLockdown() then
-            ns.RunOOC("rolerevert", Revert)
-            return
-        end
-        db.currentRole = cur
-        if cur then db.roles[cur] = before.oldProfile end
-        ns.Layout:DropUndo()
-        local layout = ns.DeepCopy(before.layout)
-        ns.Blocks:Merge(layout, ns.db.layout)
-        ns.db.layout = layout
-        ns.Layout:Apply()
-        if before.mods and ns.Modifiers then ns.Modifiers:Load(before.mods) end
-        self:KeepRole(cur, true)
-    end
-    Revert()
-    if reason == "timeout" then
-        ns.Print("Role switch failed (timed out), please try again." .. (cur and (" Still " .. cur .. ".") or ""))
-    else
-        ns.Print("Role switch failed (talent window not ready), please try again." .. (cur and (" Still " .. cur .. ".") or ""))
-    end
-    -- the server may still take the new build a bit later: check, and put the
-    -- old build back if it did (or clear the unsaved import from the window)
-    local old = before.talents
-    if not old then return end
-    ns.After(2, function()
-        local now = Talents:Current()
-        if not now or Talents:Same(now, old) then
-            Talents:Preview(old)
-            return
-        end
-        Talents:Apply(old, function(ok)
-            if ok then
-                ns.Print("Your previous talents are back: " .. Talents:Summary(old) .. ".")
-            else
-                ns.Print("Your talents could not be put back - check the talent window.")
+    local cur = self:Current()
+    local before = Talents:Current()
+    -- auto-save only refreshes a profile that was saved before
+    if cur and cur ~= key and db.roleAutoSave and db.profiles[cur] then self:Save(cur, true, true) end
+    self.switching = true
+    Talents:Apply(talents, function(ok, reason)
+        local function Finish()
+            if InCombatLockdown() then
+                ns.RunOOC("treefinish", Finish)
+                return
             end
+            self.switching = nil
+            self.lastKey = self:Current()
+            if ok then
+                local r = db.profiles[key]
+                if r and r.layout and not fresh then
+                    ns.Print("Talents changed: " .. Talents:Summary(talents) .. ".")
+                    LoadProfile(key, r)
+                else
+                    ns.Print("Switched to " .. self:Label(key) .. " - no talent points spent yet. "
+                        .. "Bars left as they are: set them up and press Save.")
+                end
+            elseif fresh then
+                ns.Print("Could not switch to " .. self:Label(key) .. " (" .. (reason == "timeout" and "timed out" or "talent window not ready")
+                    .. "). Activate it in the talent window once, then save it here.")
+            else
+                ns.Print("Switch failed (" .. (reason == "timeout" and "timed out" or "talent window not ready")
+                    .. "), please try again. Still " .. self:Label(cur) .. ".")
+            end
+            Refresh()
+        end
+        if ok then Finish() return end
+        Finish()
+        -- the server may still take the new build a bit later: put the old one back
+        if not before then return end
+        ns.After(2, function()
+            local now = Talents:Current()
+            if not now or Talents:Same(now, before) then
+                Talents:Preview(before)
+                return
+            end
+            self.switching = true
+            Talents:Apply(before, function(back)
+                self.switching = nil
+                self.lastKey = self:Current()
+                ns.Print(back and ("Your previous talents are back: " .. Talents:Summary(before) .. ".")
+                    or "Your talents could not be put back - check the talent window.")
+                Refresh()
+            end)
         end)
     end)
 end
 
-function Roles:SetGear(role, name)
+function Roles:SetGear(key, name)
     local db = DB()
-    db.roles[role] = db.roles[role] or {}
-    db.roles[role].gear = (name ~= "" and name) or nil
+    db.profiles[key] = db.profiles[key] or {}
+    db.profiles[key].gear = (name ~= "" and name) or nil
     Refresh()
 end
 
 ------------------------------------------------------------------------
--- Dual spec: optional role per talent group
+-- Changes made outside ZBar
 ------------------------------------------------------------------------
+-- talent tree changed in the game's own window: the old tree's bars are
+-- saved, the new tree's bars loaded (talents were set there already)
+function Roles:CheckTree()
+    if not ns.ready or not ns.db or self.switching or self:Mode() ~= "coa" then return end
+    local key = self:Current()
+    local last = self.lastKey
+    self.lastKey = key
+    if not last or last == key or last:sub(1, 4) ~= "tree" then return end
+    local function Go()
+        if DB().roleAutoSave and DB().profiles[last] then
+            -- bars and layout of the old tree; its talents can no longer be read
+            local r = DB().profiles[last]
+            local keep = r and r.talents
+            self:Save(last, true, true)
+            if DB().profiles[last] then DB().profiles[last].talents = keep end
+        end
+        local r = DB().profiles[key]
+        if r and r.layout then
+            LoadProfile(key, r)
+        else
+            ns.Print("Talent tree changed to " .. self:Label(key) .. " - not saved yet, bars left as they are.")
+        end
+        Refresh()
+    end
+    if InCombatLockdown() then ns.RunOOC("treechange", Go) else Go() end
+end
+
+-- dual spec (classless realm): layout, layers and gear follow the spec; the
+-- game swaps the talents and the bar contents itself
 local ev = CreateFrame("Frame")
 ev:RegisterEvent("ACTIVE_TALENT_GROUP_CHANGED")
-ev:SetScript("OnEvent", function()
-    if not ns.ready or not ns.db or not GetActiveTalentGroup then return end
-    local role = DB().specRole[GetActiveTalentGroup()]
-    if role and role ~= Roles:Current() then
-        -- give the spellbook a moment to update after the spec change
-        ns.After(1, function()
-            ns.RunOOC("roleswitch", function() Roles:Request(role, true) end)
+ev:SetScript("OnEvent", function(_, _, newGroup, oldGroup)
+    if not ns.ready or not ns.db or Roles:Mode() ~= "spec" then return end
+    local new = "spec" .. (newGroup or GetActiveTalentGroup())
+    local old = (oldGroup and ("spec" .. oldGroup)) or Roles.lastKey
+    Roles.lastKey = new
+    ns.After(1, function()
+        ns.RunOOC("specswitch", function()
+            if old and old ~= new and DB().roleAutoSave and DB().profiles[old] then Roles:Save(old, true) end
+            local r = DB().profiles[new]
+            if r and r.layout then LoadProfile(new, r) end
+            Refresh()
         end)
-    end
+    end)
 end)
-
-------------------------------------------------------------------------
--- Threat Plates link: if Threat Plates (with the Tank/DPS/Healer role
--- selector) is installed, it is the boss. Every role change goes through
--- it, and ZBar follows whatever role it is set to.
-------------------------------------------------------------------------
-local TP_ROLE = { Tank = "TANK", DPS = "DPS", Healer = "HEALER" }
-local FROM_TP = { TANK = "Tank", DPS = "DPS", HEALER = "Healer" }
-
-function Roles:TPLinked()
-    local tp = _G.TidyPlatesThreat
-    return tp and type(tp.SetRole) == "function" and type(tp.GetRole) == "function"
-        and tp.db and tp.db.char and true or false
-end
-
--- every role change from ZBar (options, minimap button, /zbar role, dual spec)
-function Roles:Request(role, fromSpec)
-    role = self:Normalize(role) or role
-    if not TP_ROLE[role] then
-        ns.Print("Usage: /zbar role tank | dps | healer")
-        return
-    end
-    if self:TPLinked() then
-        self.pendingSpec = fromSpec
-        self.requested = role
-        _G.TidyPlatesThreat:SetRole(TP_ROLE[role]) -- the hook below does the switch
-        return
-    end
-    self:Switch(role, fromSpec)
-end
-
-local function OnTPRole()
-    if not ns.ready or not ns.db then return end
-    local role = FROM_TP[_G.TidyPlatesThreat:GetRole()]
-    local fromSpec, requested = Roles.pendingSpec, Roles.requested
-    Roles.pendingSpec, Roles.requested = nil, nil
-    -- same role as now: nothing to do (unless it was clicked in ZBar = reload it)
-    if not role or (role == Roles:Current() and requested ~= role) then
-        Refresh()
-        return
-    end
-    if InCombatLockdown() then
-        ns.Print("Bars will switch to " .. role .. " when combat ends.")
-    end
-    ns.RunOOC("roleswitch", function() Roles:Switch(role, fromSpec) end)
-end
 
 -- called once the layout is ready (Core Setup)
 function Roles:OnReady()
-    if not self:TPLinked() then return end
-    if not self.hooked then
-        hooksecurefunc(_G.TidyPlatesThreat, "SetRole", OnTPRole)
-        self.hooked = true
-    end
-    -- follow the role Threat Plates already has, if the player chose one there
-    local tp = _G.TidyPlatesThreat
-    local role = FROM_TP[tp:GetRole()]
-    if tp.db.char.roleChosen and role and role ~= self:Current() then
-        self:Switch(role)
-    end
+    local db = DB()
+    -- fresh start: the old Tank / DPS / Healer role profiles are gone
+    db.roles, db.currentRole, db.specRole, db.roleTalents = nil, nil, nil, nil
+    self.lastKey = self:Current()
+    Refresh()
 end
 
 ------------------------------------------------------------------------
@@ -777,4 +802,5 @@ pointsEv:SetScript("OnUpdate", function(_, elapsed)
     if pointsWait < 3 then return end
     pointsWait = 0
     Roles:UpdateTalentPoints()
+    Roles:CheckTree()
 end)

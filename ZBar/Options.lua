@@ -92,22 +92,25 @@ Row("Factory Reset", "Put every bar back to its Blizzard position (reloads the U
 end)
 
 ------------------------------------------------------------------------
--- Role section
+-- Profiles: one per talent tree (Conquest of Azeroth) or per dual spec
 ------------------------------------------------------------------------
 local ry = y - 14
-Label("Role Profiles", 16, ry, "GameFontNormal")
-Label("Each role keeps its own bar positions, bar contents, Ctrl / Shift layers, gear set\nand (optionally) talents - this character only.", 16, ry - 18)
-ry = ry - 12 -- the line above takes two lines: everything below moves down
+local profTitle = Label("Talent Trees", 16, ry, "GameFontNormal")
+local profDesc = Label("", 16, ry - 18)
+profDesc:SetPoint("RIGHT", panel, "RIGHT", -16, 0)
+ry = ry - 12 -- the description takes two lines: everything below moves down
 local currentText = Label("", 16, ry - 34, "GameFontHighlight")
+currentText:SetPoint("RIGHT", panel, "RIGHT", -16, 0)
 
-local roleButtons, roleStatus, gearDrops = {}, {}, {}
+local slots = {} -- 3 columns: { button, status, info, gear, key }
 
-local function GearDropdown(role, x, yy)
-    local dd = CreateFrame("Frame", "ZBarGearDrop" .. role, panel, "UIDropDownMenuTemplate")
+local function GearDropdown(i, x, yy)
+    local dd = CreateFrame("Frame", "ZBarGearDrop" .. i, panel, "UIDropDownMenuTemplate")
     dd:SetPoint("TOPLEFT", x - 16, yy)
     UIDropDownMenu_SetWidth(dd, 120)
     UIDropDownMenu_Initialize(dd, function()
-        local r = ns.Roles:Get(role)
+        local key = slots[i].key
+        local r = key and ns.Roles:Get(key)
         local cur = r and r.gear
         local function Add(text, value)
             local info = UIDropDownMenu_CreateInfo()
@@ -115,7 +118,7 @@ local function GearDropdown(role, x, yy)
             info.value = value
             info.checked = (cur or "") == value
             info.func = function()
-                ns.Roles:SetGear(role, value)
+                if key then ns.Roles:SetGear(key, value) end
                 panel:refresh()
             end
             UIDropDownMenu_AddButton(info)
@@ -126,150 +129,130 @@ local function GearDropdown(role, x, yy)
     return dd
 end
 
-for i, role in ipairs(ns.Roles.list) do
-    local x = 16 + (i - 1) * 170
-    roleButtons[role] = Button(role, 150, x, ry - 54, function()
-        ns.Roles:Request(role)
+for i = 1, 3 do
+    local x = 16 + (i - 1) * 190
+    local s = {}
+    s.button = Button("", 175, x, ry - 54, function()
+        if s.key and ns.Roles:Mode() == "coa" then
+            if s.key == ns.Roles:Current() then
+                ns.Print("Already on " .. ns.Roles:Label(s.key) .. ". (Reload loads its saved bars again.)")
+            else
+                ns.Roles:Switch(s.key)
+            end
+        end
         panel:refresh()
     end)
-    roleButtons[role]:SetScript("OnEnter", function(self)
-        local r = ns.Roles:Get(role)
+    s.button:SetScript("OnEnter", function(self)
+        if not s.key then return end
+        local R = ns.Roles
+        local r = R:Get(s.key)
         GameTooltip:SetOwner(self, "ANCHOR_TOP")
-        GameTooltip:SetText(role)
+        GameTooltip:SetText(R:Label(s.key))
+        local e = R:Entry(s.key)
+        local info = e and e.tree and R:TreeInfo(e.tree)
+        if info then GameTooltip:AddLine(info, 0.8, 0.8, 0.8) end
         GameTooltip:AddLine((r and r.savedAt) and ("Saved " .. r.savedAt) or "Not saved yet", 1, 1, 1)
-        local T = ns.Roles.Talents
+        local T = R.Talents
         if r and r.talents and T:Available() then
             GameTooltip:AddLine("Talents: " .. T:Summary(r.talents), 1, 0.82, 0)
             for _, n in ipairs(T:Names(r.talents)) do GameTooltip:AddLine("  " .. n, 0.8, 0.8, 0.8) end
         end
         GameTooltip:Show()
     end)
-    roleButtons[role]:SetScript("OnLeave", function() GameTooltip:Hide() end)
-    roleStatus[role] = Label("", x, ry - 80, "GameFontDisableSmall")
-    Label("Gear set:", x, ry - 98, "GameFontNormalSmall")
-    gearDrops[role] = GearDropdown(role, x, ry - 110)
+    s.button:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    s.status = Label("", x, ry - 80, "GameFontDisableSmall")
+    s.info = Label("", x, ry - 94, "GameFontHighlightSmall")
+    s.info:SetWidth(180)
+    s.gearLabel = Label("Gear set:", x, ry - 112, "GameFontNormalSmall")
+    s.gear = GearDropdown(i, x, ry - 124)
+    slots[i] = s
 end
 
-local saveRoleButton = Button("Save Role (layout + bars)", 200, 16, ry - 148, function()
+local saveRoleButton = Button("Save", 220, 16, ry - 162, function()
     ns.Roles:Save()
     panel:refresh()
 end)
-local reloadRoleButton = Button("Reload Role", 130, 222, ry - 148, function()
+local reloadRoleButton = Button("Reload", 150, 242, ry - 162, function()
     ns.Roles:Reload()
     panel:refresh()
 end)
 
 local auto = CreateFrame("CheckButton", "ZBarRoleAutoSave", panel, "InterfaceOptionsCheckButtonTemplate")
 auto:SetPoint("LEFT", reloadRoleButton, "RIGHT", 12, 0)
-_G[auto:GetName() .. "Text"]:SetText("Auto-save when switching roles")
+_G[auto:GetName() .. "Text"]:SetText("Auto-save when switching")
 auto:SetScript("OnClick", function(self)
     if ns.db then ns.Roles.DB().roleAutoSave = self:GetChecked() and true or false end
 end)
 
--- talents (Conquest of Azeroth)
-local talentCheck = CreateFrame("CheckButton", "ZBarRoleTalents", panel, "InterfaceOptionsCheckButtonTemplate")
-talentCheck:SetPoint("TOPLEFT", 16, ry - 172)
-_G[talentCheck:GetName() .. "Text"]:SetText("Save talents with roles (Conquest of Azeroth) - asks before changing them")
-talentCheck:SetScript("OnClick", function(self)
-    if ns.db then ns.Roles.DB().roleTalents = self:GetChecked() and true or nil end
-    panel:refresh()
-end)
-
--- dual spec: role per talent group
-Label("Dual spec: switch role automatically when changing spec", 16, ry - 204, "GameFontNormalSmall")
-local specDrops = {}
-for spec = 1, 2 do
-    local x = 16 + (spec - 1) * 170
-    Label("Spec " .. spec .. ":", x, ry - 224, "GameFontHighlightSmall")
-    local dd = CreateFrame("Frame", "ZBarSpecDrop" .. spec, panel, "UIDropDownMenuTemplate")
-    dd:SetPoint("TOPLEFT", x + 30, ry - 216)
-    UIDropDownMenu_SetWidth(dd, 90)
-    UIDropDownMenu_Initialize(dd, function()
-        local cur = ns.db and ns.Roles.DB().specRole[spec]
-        local function Add(text, value)
-            local info = UIDropDownMenu_CreateInfo()
-            info.text = text
-            info.checked = (cur or "") == (value or "")
-            info.func = function()
-                if ns.db then ns.Roles.DB().specRole[spec] = value end
-                panel:refresh()
-            end
-            UIDropDownMenu_AddButton(info)
-        end
-        Add("Off", nil)
-        for _, role in ipairs(ns.Roles.list) do Add(role, role) end
-    end)
-    specDrops[spec] = dd
-end
-
--- minimap button (Threat Plates has its own role button, so this one can go)
 local mmHide = CreateFrame("CheckButton", "ZBarHideMinimap", panel, "InterfaceOptionsCheckButtonTemplate")
-mmHide:SetPoint("TOPLEFT", 360, ry - 218)
+mmHide:SetPoint("TOPLEFT", 16, ry - 190)
 _G[mmHide:GetName() .. "Text"]:SetText("Hide minimap button")
 mmHide:SetScript("OnClick", function(self)
     if ns.db then ns.Minimap:SetHidden(self:GetChecked()) end
 end)
-local tpNote = Label("", 360, ry - 244, "GameFontDisableSmall")
-tpNote:SetPoint("RIGHT", panel, "RIGHT", -16, 0) -- wraps instead of running off the page
 
 -- custom (server specific) bars: hide only
-Label("Custom Bars (hide only - moving and scaling stay in their own menu)", 16, ry - 264, "GameFontNormalSmall")
+Label("Custom Bars (hide only - moving and scaling stay in their own menu)", 16, ry - 222, "GameFontNormalSmall")
 -- up to 4 bars, two per row; filled in by refresh with whatever is found
 local customChecks = {}
 for i = 1, 4 do
     local cb = CreateFrame("CheckButton", "ZBarCustomHide" .. i, panel, "InterfaceOptionsCheckButtonTemplate")
-    cb:SetPoint("TOPLEFT", 16 + ((i - 1) % 2) * 300, ry - 276 - math.floor((i - 1) / 2) * 24)
+    cb:SetPoint("TOPLEFT", 16 + ((i - 1) % 2) * 300, ry - 234 - math.floor((i - 1) / 2) * 24)
     cb:SetScript("OnClick", function(self)
         if ns.db and self.barName then ns.CustomBars:SetHidden(self.barName, self:GetChecked()) end
     end)
     cb:Hide()
     customChecks[i] = cb
 end
-local customNone = Label("No custom bars found on this character.", 20, ry - 282, "GameFontDisableSmall")
+local customNone = Label("No custom bars found on this character.", 20, ry - 240, "GameFontDisableSmall")
 
 ------------------------------------------------------------------------
 function panel:refresh()
     unlockButton:SetText(ns.unlocked and "Lock Bars" or "Unlock Bars")
     if not ns.db then return end
 
-    local db = ns.Roles.DB()
-    local cur = db.currentRole
-    local linked = ns.Roles:TPLinked()
-    local T = ns.Roles.Talents
-    local nowT = T:Available() and T:Current()
-    currentText:SetText("Current role: " .. (cur or "none")
-        .. (linked and "   |cff8af559(follows Threat Plates)|r" or "")
-        .. (nowT and ("   |cffaaaaaaTalents now: " .. T:Summary(nowT) .. "|r") or ""))
-    talentCheck:SetChecked(db.roleTalents)
-    if T:Available() then
-        talentCheck:Enable()
-        _G[talentCheck:GetName() .. "Text"]:SetTextColor(1, 1, 1)
-    else
-        talentCheck:Disable()
-        _G[talentCheck:GetName() .. "Text"]:SetTextColor(0.5, 0.5, 0.5)
-    end
+    local R = ns.Roles
+    local db = R.DB()
+    local coa = R:Mode() == "coa"
+    local cur = R:Current()
+    local T = R.Talents
+    local nowT = coa and T:Current()
+    profTitle:SetText(coa and "Talent Trees" or "Dual Spec Profiles")
+    profDesc:SetText(coa
+        and "Each talent tree keeps its own bars, layout, Ctrl / Shift layers, gear and talents (this character only).\nSwitch here or with the minimap button: left / middle / right click."
+        or "No talent trees here: each dual spec keeps its own layout, Ctrl / Shift layers and gear.\nThe game swaps talents and bar contents with the spec itself.")
+    currentText:SetText("Now: " .. R:Label(cur)
+        .. (nowT and ("   |cffaaaaaaTalents: " .. T:Summary(nowT) .. "|r") or ""))
     mmHide:SetChecked(ns.Minimap:IsHidden())
-    tpNote:SetText(linked and "Threat Plates' role button switches ZBar too." or "")
-    for _, role in ipairs(ns.Roles.list) do
-        local r = db.roles[role]
-        roleButtons[role]:SetText(role == cur and ("> " .. role .. " <") or role)
-        local status = (r and r.savedAt) and ("Saved " .. r.savedAt:sub(6)) or "Not saved yet"
-        if r and r.talents and ns.Roles.Talents:Available() then
-            local cp, sp = ns.Roles.Talents:Points(r.talents)
-            status = status .. " | " .. ns.Roles.Talents:SpecName(r.talents) .. " " .. cp .. "/" .. sp
+    local list = R:List()
+    for i, s in ipairs(slots) do
+        local e = list[i]
+        s.key = e and e.key
+        if e then
+            local r = db.profiles[e.key]
+            s.button:SetText(e.key == cur and ("> " .. e.label .. " <") or e.label)
+            s.button:Show()
+            local status = (r and r.savedAt) and ("Saved " .. r.savedAt:sub(6)) or "Not saved yet"
+            if r and r.talents and T:Available() then
+                local cp, sp = T:Points(r.talents)
+                status = status .. " | " .. cp .. " / " .. sp .. " points"
+            end
+            s.status:SetText(status)
+            s.info:SetText(e.tree and (R:TreeInfo(e.tree) or "") or "")
+            UIDropDownMenu_SetText(s.gear, (r and r.gear) or "No gear change")
+            s.status:Show() s.info:Show() s.gearLabel:Show() s.gear:Show()
+            -- dual spec profiles switch with the game's spec, not here
+            if coa then s.button:Enable() else s.button:Disable() end
+        else
+            s.button:Hide() s.status:Hide() s.info:Hide() s.gearLabel:Hide() s.gear:Hide()
         end
-        roleStatus[role]:SetText(status)
-        UIDropDownMenu_SetText(gearDrops[role], (r and r.gear) or "No gear change")
     end
-    local saved = cur and db.roles[cur] and db.roles[cur].actions
+    local saved = cur and db.profiles[cur] and db.profiles[cur].layout
     if cur then saveRoleButton:Enable() else saveRoleButton:Disable() end
     if saved then reloadRoleButton:Enable() else reloadRoleButton:Disable() end
-    saveRoleButton:SetText(cur and ("Save " .. cur .. " (layout + bars)") or "Save Role (layout + bars)")
-    reloadRoleButton:SetText(cur and ("Reload " .. cur) or "Reload Role")
+    saveRoleButton:SetText("Save " .. R:Label(cur))
+    reloadRoleButton:SetText("Reload " .. ((R:Entry(cur) or {}).name or ""))
     auto:SetChecked(db.roleAutoSave)
-    for spec = 1, 2 do
-        UIDropDownMenu_SetText(specDrops[spec], db.specRole[spec] or "Off")
-    end
     local bars = ns.CustomBars:OptionList()
     for i, cb in ipairs(customChecks) do
         local b = bars[i]
@@ -384,7 +367,7 @@ end
 local setUp = MButton("Set Up", 120, function() ns.Modifiers:OpenSetup() end)
 MButton("Clear All Ctrl / Shift Actions", 220, function() StaticPopup_Show("ZBAR_CLEAR_LAYERS") end, setUp)
 
-MText("Saved per character and in each role profile. If your key bindings are account-wide "
+MText("Saved per character and in each talent tree profile. If your key bindings are account-wide "
     .. "(not \"Character Specific\"), freeing the keys affects your other characters too.", 16, "GameFontDisableSmall", 12)
 
 function mp:refresh()
