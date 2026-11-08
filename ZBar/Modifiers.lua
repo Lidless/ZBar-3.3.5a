@@ -1082,13 +1082,23 @@ function Mod:LayersDragStart(name)
     Debug("layers start", name)
 end
 
--- the button (or stand-in) under the mouse
+-- the button (or stand-in) under the mouse; an empty button the game hides
+-- counts too while its bar is shown (its layers can still be filled)
 local function ButtonUnderMouse()
+    local hidden
     for name, info in pairs(ns.Bars.info) do
+        local btn = info.btn
         local p = proxies[name]
-        local frame = (p and p:IsVisible()) and p or info.btn
-        if frame and frame:IsVisible() and MouseIsOver(frame) then return name end
+        if p and p:IsVisible() then
+            if MouseIsOver(p) then return name end
+        elseif btn and btn:IsVisible() then
+            if MouseIsOver(btn) then return name end
+        elseif btn and info.managed and btn:GetParent() and btn:GetParent():IsVisible()
+            and btn:GetParent() ~= ns.Groups.hiddenParent and MouseIsOver(btn) then
+            hidden = hidden or name
+        end
     end
+    return hidden
 end
 
 function Mod:LayersDragStop()
