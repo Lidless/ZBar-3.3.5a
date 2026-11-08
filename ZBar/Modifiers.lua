@@ -1002,7 +1002,8 @@ end
 local function DragStart(btn, name)
     Debug("start", name, "slot", SlotOf(btn), "cursor", GetCursorInfo(), "unlocked", ns.unlocked)
     if ns.unlocked or not GetCursorInfo() then return end -- ZBar's own unlock mode has its own handling
-    carry = { origin = name, from = name, slot = SlotOf(btn) }
+    local slot = SlotOf(btn)
+    carry = { origin = name, from = name, slot = slot, originSlot = slot, info = { GetCursorInfo() } }
     if lockDeadline then lockDeadline = GetTime() + LOCK_IDLE end
 end
 
@@ -1020,33 +1021,90 @@ local function Dropped(name)
     SetLayers(name, moving)
     carry.from, carry.pending = nil, old
     carry.slot = SlotOf(ns.Bars.info[name].btn)
+    carry.info = { GetCursorInfo() } -- what the other button had (now on the cursor)
     if lockDeadline then lockDeadline = GetTime() + LOCK_IDLE end
     Mod:ApplyAll()
 end
 
 -- the cursor got empty: the drag is over
+-- name of what the cursor held (GetCursorInfo() values)
+local function CursorThing(info)
+    local t, a, b = info[1], info[2], info[3]
+    local name
+    if t == "spell" then name = GetSpellName(a, b or BOOKTYPE_SPELL)
+    elseif t == "macro" then name = GetMacroInfo(a)
+    elseif t == "item" then name = GetItemInfo(a)
+    elseif t == "companion" and GetCompanionInfo then name = select(2, GetCompanionInfo(b, a))
+    elseif t == "equipmentset" then name = a
+    end
+    return name or "this"
+end
+
+-- puts what the cursor held back on a slot
+local function PutBack(info, slot)
+    local t, a, b = info[1], info[2], info[3]
+    ClearCursor()
+    if t == "spell" then PickupSpell(a, b or BOOKTYPE_SPELL)
+    elseif t == "macro" then PickupMacro(a)
+    elseif t == "item" then PickupItem(a)
+    elseif t == "companion" and PickupCompanion then PickupCompanion(b, a)
+    elseif t == "equipmentset" and PickupEquipmentSetByName then PickupEquipmentSetByName(a)
+    end
+    if GetCursorInfo() and slot then PlaceAction(slot) end
+    ClearCursor()
+end
+
+-- "really remove?" - yes / no run the given functions
+local function Confirm(what, extra, yes, no)
+    StaticPopup_Show("ZBAR_CONFIRM_REMOVE", what, extra or "", { yes = yes, no = no })
+end
+
+-- the cursor got empty: the drag is over. Something let go off the bars
+-- (the game removes it) is asked about: no puts it back.
 local function DragEnd()
     Debug("end", carry and carry.pending and "with pending layers" or "")
     local c = carry
     carry = nil
-    if not c or not c.pending then return end
-    -- the other button's spell was thrown away: its Ctrl / Shift actions are
-    -- not, they go to the button the drag started from (if it has none now)
-    local into = c.origin
-    if into and not DB().mods[into] then
-        SetLayers(into, c.pending)
-        ns.Print("Ctrl / Shift actions of the removed spell went to " .. Label(into) .. ".")
-    else
-        ns.Print("The Ctrl / Shift actions of the removed spell were removed too.")
+    if not c then return end
+    if c.from then
+        -- never placed anywhere: thrown away from its own button (unless it
+        -- went back onto its own slot)
+        if c.originSlot and HasAction(c.originSlot) then return end
+        local layers = Layers(c.origin)
+        Confirm(CursorThing(c.info), layers and "\nIts Ctrl / Shift actions go too." or "",
+            function()
+                SetLayers(c.origin, nil)
+                Mod:ApplyAll()
+            end,
+            function() PutBack(c.info, c.originSlot) end)
+        return
     end
-    Mod:ApplyAll()
+    if not c.pending and not (c.info and c.info[1]) then return end
+    if c.info and c.info[1] == nil then
+        -- the other button was empty: nothing on the cursor, nothing thrown
+        if c.pending then
+            SetLayers(c.origin, c.pending)
+            Mod:ApplyAll()
+        end
+        return
+    end
+    -- the other button's spell (on the cursor after the swap) was thrown away
+    local pending = c.pending
+    Confirm(CursorThing(c.info), pending and "\nIts Ctrl / Shift actions go too." or "",
+        function() end,
+        function()
+            -- back where the drag started (that slot is empty now), with its layers
+            if c.originSlot and not HasAction(c.originSlot) then PutBack(c.info, c.originSlot) end
+            if pending and not DB().mods[c.origin] then SetLayers(c.origin, pending) end
+            Mod:ApplyAll()
+        end)
 end
 
 -- A button with layer actions but no spell of its own: the game picks up
 -- nothing, so Shift+drag (or a plain drag on unlocked bars) carries its
 -- Ctrl / Shift actions instead. Where the mouse is let go, they swap with
 -- that button's layer actions; the spells stay where they are. Let go off
--- the bars, they are removed (like a spell dragged off a bar).
+-- the bars, they are removed (after asking).
 local layerCarry
 local ghost
 
@@ -1111,10 +1169,11 @@ function Mod:LayersDragStop()
     Debug("layers stop", from, "->", to)
     if to == from then return end
     if not to then
-        -- let go off the bars: removed, like a spell dragged off a bar
-        SetLayers(from, nil)
-        ns.Print("Ctrl / Shift actions of " .. Label(from) .. " removed.")
-        self:ApplyAll()
+        -- let go off the bars: removed (after asking), like a spell dragged off a bar
+        Confirm("the Ctrl / Shift actions of " .. Label(from), "", function()
+            SetLayers(from, nil)
+            Mod:ApplyAll()
+        end)
         return
     end
     local moving, old = Layers(from), Layers(to)
@@ -1123,6 +1182,19 @@ function Mod:LayersDragStop()
     if lockDeadline then lockDeadline = GetTime() + LOCK_IDLE end
     self:ApplyAll()
 end
+
+StaticPopupDialogs["ZBAR_CONFIRM_REMOVE"] = {
+    text = "ZBar: remove %s from the bar?%s",
+    button1 = YES or "Yes",
+    button2 = NO or "No",
+    OnShow = function(self) if ns.SolidPopupOn then ns.SolidPopupOn(self) end end,
+    OnHide = function(self) if ns.SolidPopupOff then ns.SolidPopupOff(self) end end,
+    OnAccept = function(_, data) if data and data.yes then data.yes() end end,
+    OnCancel = function(_, data) if data and data.no then data.no() end end,
+    timeout = 0,
+    whileDead = true,
+    hideOnEscape = true,
+}
 
 local hooked = {}
 function Mod:HookDrags()
