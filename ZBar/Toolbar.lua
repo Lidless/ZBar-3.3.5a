@@ -133,6 +133,8 @@ SlashCmdList.ZBAR = function(msg)
         ns.Roles:Reload()
     elseif cmd == "layers" or cmd == "modifiers" then
         ns.Modifiers:OpenSetup()
+    elseif cmd == "talentdebug" then
+        ns.Roles.Talents:ToggleDebug()
     elseif cmd == "dragdebug" then
         ns.Modifiers:ToggleDragDebug()
     elseif cmd == "macro" or cmd == "macros" then

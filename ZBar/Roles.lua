@@ -330,6 +330,36 @@ local watcher = CreateFrame("Frame")
 
 -- done(ok, reason) is called when the server confirmed the build, or on failure
 -- (reason: "notready" or "timeout"; the caller prints the message)
+-- /zbar talentdebug: what the talent loading sees, step by step
+local function TDebug(...)
+    if not Talents.debug then return end
+    local out = {}
+    for i = 1, select("#", ...) do out[i] = tostring((select(i, ...))) end
+    ns.Print("|cff999999talents:|r " .. table.concat(out, " "))
+end
+
+local function Diff(now, want)
+    if not (now and want) then return "no data" end
+    local d = {}
+    if now.spec ~= want.spec then d[#d + 1] = "tree " .. tostring(now.spec) .. "~=" .. tostring(want.spec) end
+    local s = Spec(want.spec)
+    local passive = s and s.passiveNode
+    local seen = {}
+    for id, r in pairs(want.ranks) do
+        seen[id] = true
+        if id ~= passive and (now.ranks[id] or 0) ~= r then d[#d + 1] = id .. ":" .. (now.ranks[id] or 0) .. "~=" .. r end
+    end
+    for id, r in pairs(now.ranks) do
+        if not seen[id] and id ~= passive then d[#d + 1] = id .. ":" .. r .. " extra" end
+    end
+    return #d > 0 and table.concat(d, " ") or "same"
+end
+
+function Talents:ToggleDebug()
+    self.debug = not self.debug
+    ns.Print("Talent debug " .. (self.debug and "on" or "off") .. ".")
+end
+
 function Talents:Apply(t, done)
     local T = _G.CoA.Talents
     local tr, apply = T.transfer, T.apply
@@ -343,8 +373,11 @@ function Talents:Apply(t, done)
     local wasShown = tr:IsShown()
     tr:Show()
     tr.edit:SetText(self:Code(t))
+    TDebug("now", self:Code(self:Current() or t))
+    TDebug("import", self:Code(t))
     tr.import:Click()
     if not wasShown then tr:Hide() end
+    TDebug("Save Changes enabled:", ApplyEnabled(apply), "after import, diff:", Diff(self:Current(), t))
 
     local waited, clicked = 0, false
     watcher:SetScript("OnUpdate", function(self, elapsed)
@@ -352,9 +385,11 @@ function Talents:Apply(t, done)
         if not clicked then
             if ApplyEnabled(apply) then
                 clicked, waited = true, 0
+                TDebug("clicking Save Changes")
                 apply:Click()
             elseif waited > 3 then
                 self:SetScript("OnUpdate", nil)
+                TDebug("Save Changes stayed disabled for 3 s")
                 done(false, "timeout")
             end
         else
@@ -365,6 +400,7 @@ function Talents:Apply(t, done)
                 ns.After(0.5, function() done(true) end)
             elseif waited > 6 then
                 self:SetScript("OnUpdate", nil)
+                TDebug("server did not confirm in 6 s, diff:", Diff(now, t))
                 done(false, "timeout")
             end
         end
