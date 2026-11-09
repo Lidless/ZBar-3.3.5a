@@ -328,8 +328,6 @@ end
 
 local watcher = CreateFrame("Frame")
 
--- done(ok, reason) is called when the server confirmed the build, or on failure
--- (reason: "notready" or "timeout"; the caller prints the message)
 -- /zbar talentdebug: what the talent loading sees, step by step
 local function TDebug(...)
     if not Talents.debug then return end
@@ -360,6 +358,25 @@ function Talents:ToggleDebug()
     ns.Print("Talent debug " .. (self.debug and "on" or "off") .. ".")
 end
 
+-- the tree's own table, as the talent window's SelectSpec wants it
+local function SpecObject(T, id)
+    if type(T.OwnSpecs) == "function" then
+        local ok, list = pcall(T.OwnSpecs, T)
+        if ok and type(list) == "table" then
+            for _, e in pairs(list) do
+                if type(e) == "table" and (e.id == id or e.ID == id) then return e end
+            end
+        end
+    end
+    return Spec(id)
+end
+
+-- Loads a build: another tree is activated first (the talent window's
+-- SelectSpec - the server switches the tree and keeps the class tree points),
+-- and only once the server has switched is the build imported and saved.
+-- t.activateOnly: just switch to the tree (a tree never saved).
+-- done(ok, reason) is called when the server confirmed it, or on failure
+-- (reason: "notready" or "timeout"; the caller prints the message)
 function Talents:Apply(t, done)
     local T = _G.CoA.Talents
     local tr, apply = T.transfer, T.apply
@@ -367,63 +384,78 @@ function Talents:Apply(t, done)
         return done(false, "notready")
     end
     local version = _G.CoA.TalentData.version
-    if t.version and version and t.version ~= version then
+    if t.version and version and t.version ~= version and not t.activateOnly then
         ns.Print("Note: the talent data changed since this build was saved - it may not load completely.")
     end
-    -- the window imports into the tree it has selected: select the build's
-    -- tree first (another tree than the active one is otherwise ignored)
-    local cur = self:Current()
-    if cur and cur.spec ~= t.spec and type(T.SelectSpec) == "function" then
-        -- SelectSpec takes the tree's own table: from the window's list of the
-        -- character's trees, or the talent data
-        local spec
-        if type(T.OwnSpecs) == "function" then
-            local ok, list = pcall(T.OwnSpecs, T)
-            if ok and type(list) == "table" then
-                for _, e in pairs(list) do
-                    if type(e) == "table" and (e.id == t.spec or e.ID == t.spec) then spec = e end
+
+    local function Finished(ok, reason)
+        watcher:SetScript("OnUpdate", nil)
+        if ok then
+            -- give the spellbook a moment to pick up the new talent spells
+            ns.After(0.5, function() done(true) end)
+        else
+            done(false, reason)
+        end
+    end
+
+    -- step 2: import the build into the active tree and press Save Changes
+    local function Import()
+        local now = self:Current()
+        if t.activateOnly or (now and self:Same(now, t)) then
+            TDebug("nothing to import:", t.activateOnly and "tree only" or "build already in place")
+            return Finished(true)
+        end
+        local wasShown = tr:IsShown()
+        tr:Show()
+        tr.edit:SetText(self:Code(t))
+        TDebug("now", self:Code(now or t))
+        TDebug("import", self:Code(t))
+        tr.import:Click()
+        if not wasShown then tr:Hide() end
+        TDebug("Save Changes enabled:", ApplyEnabled(apply), "after import, diff:", Diff(self:Current(), t))
+        local waited, clicked = 0, false
+        watcher:SetScript("OnUpdate", function(_, elapsed)
+            waited = waited + elapsed
+            if not clicked then
+                if ApplyEnabled(apply) then
+                    clicked, waited = true, 0
+                    TDebug("clicking Save Changes")
+                    apply:Click()
+                elseif waited > 3 then
+                    TDebug("Save Changes stayed disabled for 3 s")
+                    Finished(false, "timeout")
+                end
+            else
+                local cur = Talents:Current()
+                if cur and Talents:Same(cur, t) then
+                    Finished(true)
+                elseif waited > 6 then
+                    TDebug("server did not confirm in 6 s, diff:", Diff(cur, t))
+                    Finished(false, "timeout")
                 end
             end
-            TDebug("OwnSpecs:", ok and type(list) or tostring(list), "found:", spec and "yes" or "no")
-        end
-        spec = spec or Spec(t.spec)
-        local ok, err = pcall(T.SelectSpec, T, spec)
-        TDebug("SelectSpec(" .. tostring(t.spec) .. "):", ok and "ok" or tostring(err),
-            "now selected:", tostring(self:Current() and self:Current().spec))
+        end)
     end
-    local wasShown = tr:IsShown()
-    tr:Show()
-    tr.edit:SetText(self:Code(t))
-    TDebug("now", self:Code(self:Current() or t))
-    TDebug("import", self:Code(t))
-    tr.import:Click()
-    if not wasShown then tr:Hide() end
-    TDebug("Save Changes enabled:", ApplyEnabled(apply), "after import, diff:", Diff(self:Current(), t))
 
-    local waited, clicked = 0, false
-    watcher:SetScript("OnUpdate", function(self, elapsed)
+    -- step 1: another tree is activated first, then wait for the server
+    local cur = self:Current()
+    if not cur or cur.spec == t.spec then return Import() end
+    if type(T.SelectSpec) ~= "function" then return done(false, "notready") end
+    local ok, err = pcall(T.SelectSpec, T, SpecObject(T, t.spec))
+    TDebug("activate tree " .. tostring(t.spec) .. ":", ok and "sent" or tostring(err))
+    if not ok then return done(false, "notready") end
+    local waited = 0
+    watcher:SetScript("OnUpdate", function(_, elapsed)
         waited = waited + elapsed
-        if not clicked then
-            if ApplyEnabled(apply) then
-                clicked, waited = true, 0
-                TDebug("clicking Save Changes")
-                apply:Click()
-            elseif waited > 3 then
-                self:SetScript("OnUpdate", nil)
-                TDebug("Save Changes stayed disabled for 3 s")
-                done(false, "timeout")
-            end
-        else
-            local now = Talents:Current()
-            if now and Talents:Same(now, t) then
-                self:SetScript("OnUpdate", nil)
-                -- give the spellbook a moment to pick up the new talent spells
-                ns.After(0.5, function() done(true) end)
-            elseif waited > 6 then
-                self:SetScript("OnUpdate", nil)
-                TDebug("server did not confirm in 6 s, diff:", Diff(now, t))
-                done(false, "timeout")
-            end
+        local now = Talents:Current()
+        if now and now.spec == t.spec then
+            TDebug("tree active after", string.format("%.1f s", waited))
+            watcher:SetScript("OnUpdate", nil)
+            -- the tree's state settles a moment after the switch
+            ns.After(0.3, Import)
+        elseif waited > 8 then
+            TDebug("tree not active after 8 s")
+            Finished(false, "timeout")
         end
     end)
 end
@@ -636,7 +668,7 @@ function Roles:Switch(key)
     local fresh = not want
     if fresh then
         -- never saved: an empty build of that tree (all its points to spend)
-        want = { version = _G.CoA.TalentData.version, class = now.class, spec = e.tree, ranks = {} }
+        want = { version = _G.CoA.TalentData.version, class = now.class, spec = e.tree, ranks = {}, activateOnly = true }
     end
     if now.spec == e.tree and Talents:Same(now, want) then
         -- same tree, same talents: only the bars
@@ -655,7 +687,7 @@ function Roles:Switch(key)
         return
     end
     local text = fresh
-        and ("This tree is not saved yet: it starts with no talent points spent\n(the talent button glows until you spend them).\nYour bars stay as they are - set them up and press Save.")
+        and ("This tree is not saved yet: it is activated the way the game does it\n(its spec talents are to be spent - the talent button glows).\nYour bars stay as they are - set them up and press Save.")
         or ("This also loads the talents saved with this tree:\n|cffffd100" .. Talents:Summary(want)
             .. "|r\n\nTalents load first, then the bars (talent spells are on them).")
     StaticPopup_Show("ZBAR_TREE_SWITCH", e.label, text, {
@@ -687,7 +719,7 @@ function Roles:DoSwitch(key, talents, fresh)
                     ns.Print("Talents changed: " .. Talents:Summary(talents) .. ".")
                     LoadProfile(key, r)
                 else
-                    ns.Print("Switched to " .. self:Label(key) .. " - no talent points spent yet. "
+                    ns.Print("Switched to " .. self:Label(key) .. " - spend its talent points (the talent button glows). "
                         .. "Bars left as they are: set them up and press Save.")
                 end
             elseif fresh then
