@@ -370,6 +370,13 @@ function Talents:Apply(t, done)
     if t.version and version and t.version ~= version then
         ns.Print("Note: the talent data changed since this build was saved - it may not load completely.")
     end
+    -- the window imports into the tree it has selected: select the build's
+    -- tree first (another tree than the active one is otherwise ignored)
+    local cur = self:Current()
+    if cur and cur.spec ~= t.spec and type(T.SelectSpec) == "function" then
+        local ok, err = pcall(T.SelectSpec, T, t.spec)
+        TDebug("SelectSpec(" .. tostring(t.spec) .. "):", ok and "ok" or tostring(err))
+    end
     local wasShown = tr:IsShown()
     tr:Show()
     tr.edit:SetText(self:Code(t))
