@@ -421,6 +421,12 @@ function Talents:Apply(t, done)
                     clicked, waited = true, 0
                     TDebug("clicking Save Changes")
                     apply:Click()
+                elseif waited > 1 and type(T.Commit) == "function" then
+                    -- the button only updates while the window is shown: commit
+                    -- the imported build the way Save Changes does
+                    clicked, waited = true, 0
+                    local cok, cerr = pcall(T.Commit, T)
+                    TDebug("Save Changes disabled, Commit():", cok and "ok" or tostring(cerr))
                 elseif waited > 3 then
                     TDebug("Save Changes stayed disabled for 3 s")
                     Finished(false, "timeout")
