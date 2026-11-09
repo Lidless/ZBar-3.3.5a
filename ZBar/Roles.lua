@@ -374,8 +374,22 @@ function Talents:Apply(t, done)
     -- tree first (another tree than the active one is otherwise ignored)
     local cur = self:Current()
     if cur and cur.spec ~= t.spec and type(T.SelectSpec) == "function" then
-        local ok, err = pcall(T.SelectSpec, T, t.spec)
-        TDebug("SelectSpec(" .. tostring(t.spec) .. "):", ok and "ok" or tostring(err))
+        -- SelectSpec takes the tree's own table: from the window's list of the
+        -- character's trees, or the talent data
+        local spec
+        if type(T.OwnSpecs) == "function" then
+            local ok, list = pcall(T.OwnSpecs, T)
+            if ok and type(list) == "table" then
+                for _, e in pairs(list) do
+                    if type(e) == "table" and (e.id == t.spec or e.ID == t.spec) then spec = e end
+                end
+            end
+            TDebug("OwnSpecs:", ok and type(list) or tostring(list), "found:", spec and "yes" or "no")
+        end
+        spec = spec or Spec(t.spec)
+        local ok, err = pcall(T.SelectSpec, T, spec)
+        TDebug("SelectSpec(" .. tostring(t.spec) .. "):", ok and "ok" or tostring(err),
+            "now selected:", tostring(self:Current() and self:Current().spec))
     end
     local wasShown = tr:IsShown()
     tr:Show()
