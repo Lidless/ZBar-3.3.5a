@@ -706,6 +706,7 @@ local gearWait = CreateFrame("Frame")
 local gearName, gearQuiet, gearTotal
 gearWait:SetScript("OnEvent", function() gearQuiet = 0 end)
 gearWait:SetScript("OnUpdate", function(self, elapsed)
+    if not gearName then self:Hide() return end
     gearQuiet, gearTotal = gearQuiet + elapsed, gearTotal + elapsed
     if gearQuiet < 1.5 and gearTotal < 6 then return end
     self:Hide()
