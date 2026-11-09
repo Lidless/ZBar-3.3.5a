@@ -448,11 +448,18 @@ function Talents:Apply(t, done)
     watcher:SetScript("OnUpdate", function(_, elapsed)
         waited = waited + elapsed
         local now = Talents:Current()
-        if now and now.spec == t.spec then
-            TDebug("tree active after", string.format("%.1f s", waited))
+        if now and now.spec == t.spec and T.selecting ~= true then
+            TDebug("tree active after", string.format("%.1f s", waited), "selecting:", tostring(T.selecting),
+                "revision:", tostring(_G.Ex_GetCoATalentRevision and _G.Ex_GetCoATalentRevision()))
             watcher:SetScript("OnUpdate", nil)
-            -- the tree's state settles a moment after the switch
-            ns.After(0.3, Import)
+            -- the window still holds the old tree: let it read the new state
+            ns.After(0.3, function()
+                if type(T.SyncState) == "function" then
+                    local sok, serr = pcall(T.SyncState, T)
+                    TDebug("SyncState:", sok and "ok" or tostring(serr))
+                end
+                ns.After(0.3, Import)
+            end)
         elseif waited > 8 then
             TDebug("tree not active after 8 s")
             Finished(false, "timeout")
