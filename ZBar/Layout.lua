@@ -366,7 +366,7 @@ end
 function Layout:Save()
     ns.db.saved = ns.DeepCopy(L())
     ns.db.savedAt = date("%Y-%m-%d %H:%M")
-    ns.Print("Layout saved (positions only - bar contents are saved per role).")
+    ns.Print("Layout saved (positions only - bar contents are saved per talent tree).")
 end
 
 function Layout:Restore()

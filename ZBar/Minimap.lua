@@ -1,33 +1,28 @@
 -- ZBar minimap button
---   Left click       : DPS role
---   Middle click     : Tank role
---   Right click      : Healer role
---   Alt+right click  : open the ZBar options
---   Drag             : move the button around the minimap
+-- Conquest of Azeroth (talent trees):
+--   Left / middle / right click : three talent trees of the class (a class
+--                                 with four trees: picked in the options)
+--   Alt+right click             : open the ZBar options
+-- Classless realm (no talent trees): any click opens the options.
+--   Drag                        : move the button around the minimap
 -- (no unlock here on purpose: a stray click would fill the screen with move
 -- handles; unlocking stays in /zbar and the options)
--- (one button per role: no stepping through a role you don't want, which
--- matters when roles also change talents)
--- The icon shows the current role. It can be hidden in the options
--- (handy when Threat Plates already has its own role button).
+-- The icon shows the tree in use. It can be hidden in the options.
 local _, ns = ...
 local MM = {}
 ns.Minimap = MM
 
-local ROLE_ICON = {
-    Tank = "Interface\\Icons\\Ability_Defend",
-    DPS = "Interface\\Icons\\Ability_DualWield",
-    Healer = "Interface\\Icons\\Spell_Holy_FlashHeal",
-}
-local NO_ROLE_ICON = "Interface\\Icons\\INV_Misc_QuestionMark"
-local CLICK_ROLE = { LeftButton = "DPS", MiddleButton = "Tank", RightButton = "Healer" }
+local NO_ICON = "Interface\\Icons\\INV_Misc_QuestionMark"
+local SPEC_ICON = "Interface\\Icons\\Ability_Marksmanship"
+local CLICK_INDEX = { LeftButton = 1, MiddleButton = 2, RightButton = 3 }
+local CLICK_NAME = { "Left click", "Middle click", "Right click" }
 
 local button
 
 local function Settings()
     ns.db.minimap = ns.db.minimap or {}
     local s = ns.db.minimap
-    if s.angle == nil then s.angle = 200 end -- next to the Threat Plates button (225)
+    if s.angle == nil then s.angle = 200 end
     return s
 end
 
@@ -50,21 +45,29 @@ end
 local function ShowTooltip(self)
     GameTooltip:SetOwner(self, "ANCHOR_LEFT")
     GameTooltip:AddLine("ZBar")
-    local role = ns.Roles:Current()
-    local r = role and ns.Roles:Get(role)
-    if role then
-        GameTooltip:AddLine("Role: " .. role .. ((r and r.actions) and "" or " |cffFF3333(bars not saved yet)|r"), 1, 1, 1)
+    local R = ns.Roles
+    local cur = R:Current()
+    if R:Mode() == "coa" then
+        GameTooltip:AddLine(" ")
+        local clicks = R:ClickTrees()
+        for i = 1, 3 do
+            local e = clicks[i]
+            if e then
+                local saved = R:Get(e.key)
+                GameTooltip:AddDoubleLine("|cffeda55f" .. CLICK_NAME[i] .. ":|r " .. e.label
+                    .. (e.key == cur and "  |cff8af559(now)|r" or ""),
+                    (saved and saved.layout) and "" or "|cffff6060not saved yet|r", 0.9, 0.9, 0.9)
+            end
+        end
+        if #R:List() > 3 then
+            GameTooltip:AddLine("(which trees are on the clicks: ZBar options)", 0.6, 0.6, 0.6)
+        end
+        GameTooltip:AddLine("|cffeda55fAlt+right click:|r ZBar options", 0.8, 0.8, 0.8)
     else
-        GameTooltip:AddLine("Role: none chosen yet", 1, 1, 1)
+        GameTooltip:AddLine(R:Label(cur) .. " (profile follows the dual spec)", 1, 1, 1)
+        GameTooltip:AddLine(" ")
+        GameTooltip:AddLine("|cffeda55fClick:|r ZBar options", 0.8, 0.8, 0.8)
     end
-    if ns.Roles:TPLinked() then
-        GameTooltip:AddLine("Linked to Threat Plates", 0.54, 0.96, 0.35)
-    end
-    GameTooltip:AddLine(" ")
-    GameTooltip:AddLine("|cffeda55fLeft click:|r DPS", 0.8, 0.8, 0.8)
-    GameTooltip:AddLine("|cffeda55fMiddle click:|r Tank", 0.8, 0.8, 0.8)
-    GameTooltip:AddLine("|cffeda55fRight click:|r Healer", 0.8, 0.8, 0.8)
-    GameTooltip:AddLine("|cffeda55fAlt+right click:|r ZBar options", 0.8, 0.8, 0.8)
     GameTooltip:AddLine("|cffeda55fDrag:|r move this button", 0.8, 0.8, 0.8)
     GameTooltip:Show()
 end
@@ -75,8 +78,15 @@ function MM:Update()
         button:Hide()
         return
     end
-    local role = ns.Roles:Current()
-    button.icon:SetTexture(ROLE_ICON[role] or NO_ROLE_ICON)
+    local R = ns.Roles
+    local icon
+    if R:Mode() == "coa" then
+        local e = R:Entry(R:Current())
+        icon = e and R:TreeIcon(e.tree)
+    else
+        icon = SPEC_ICON
+    end
+    button.icon:SetTexture(icon or NO_ICON)
     UpdatePosition()
     button:Show()
     if GameTooltip:IsOwned(button) then ShowTooltip(button) end
@@ -89,6 +99,11 @@ end
 
 function MM:IsHidden()
     return ns.db and Settings().hide and true or false
+end
+
+local function OpenOptions()
+    InterfaceOptionsFrame_OpenToCategory(ns.OptionsPanel)
+    InterfaceOptionsFrame_OpenToCategory(ns.OptionsPanel)
 end
 
 function MM:Create()
@@ -117,23 +132,24 @@ function MM:Create()
     icon:SetPoint("TOPLEFT", 7, -6)
     button.icon = icon
 
-    -- small "Z" so it is not mistaken for the Threat Plates button
+    -- small "Z" so it is not mistaken for another addon's button
     local tag = button:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     tag:SetPoint("BOTTOMRIGHT", -5, 5)
     tag:SetText("Z")
 
     button:SetScript("OnClick", function(self, mouse)
-        if mouse == "RightButton" and IsAltKeyDown() then
-            InterfaceOptionsFrame_OpenToCategory(ns.OptionsPanel)
-            InterfaceOptionsFrame_OpenToCategory(ns.OptionsPanel)
+        local R = ns.Roles
+        if R:Mode() ~= "coa" or (mouse == "RightButton" and IsAltKeyDown()) then
+            OpenOptions()
+            return
+        end
+        local e = R:ClickTrees()[CLICK_INDEX[mouse] or 0]
+        if not e then return end
+        if e.key == R:Current() then
+            -- a stray click must not throw away unsaved bar changes
+            ns.Print("Already on " .. e.label .. ". (Reload in the options loads its saved bars again.)")
         else
-            local role = CLICK_ROLE[mouse]
-            if not role then return end
-            if role == ns.Roles:Current() then
-                ns.Print("Already in the " .. role .. " role. (Reload Role in the options loads it again.)")
-            else
-                ns.Roles:Request(role)
-            end
+            R:Switch(e.key)
         end
     end)
     button:SetScript("OnDragStart", function(self)
