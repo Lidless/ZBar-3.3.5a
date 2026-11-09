@@ -698,6 +698,37 @@ function Roles:Save(key, quiet, merge)
     Refresh()
 end
 
+-- Gear after a tree switch: the tree's skills (e.g. wielding two two-handers)
+-- arrive a little after the talents. A set equipped before that fails half
+-- way and the server mails the item back - so the set waits until the skill
+-- and spell changes have been quiet for a moment (at most a few seconds).
+local gearWait = CreateFrame("Frame")
+local gearName, gearQuiet, gearTotal
+gearWait:SetScript("OnEvent", function() gearQuiet = 0 end)
+gearWait:SetScript("OnUpdate", function(self, elapsed)
+    gearQuiet, gearTotal = gearQuiet + elapsed, gearTotal + elapsed
+    if gearQuiet < 1.5 and gearTotal < 6 then return end
+    self:Hide()
+    self:UnregisterAllEvents()
+    local name = gearName
+    gearName = nil
+    if InCombatLockdown() then
+        ns.RunOOC("treegear", function() Roles:EquipSet(name) end)
+    else
+        Roles:EquipSet(name)
+    end
+end)
+gearWait:Hide()
+
+local function EquipLater(name)
+    if not name or name == "" then return end
+    gearName, gearQuiet, gearTotal = name, 0, 0
+    gearWait:RegisterEvent("SKILL_LINES_CHANGED")
+    gearWait:RegisterEvent("SPELLS_CHANGED")
+    gearWait:RegisterEvent("LEARNED_SPELL_IN_TAB")
+    gearWait:Show()
+end
+
 -- puts a profile's layout, layers, bars (tree profiles) and gear on
 local function LoadProfile(key, r, quiet)
     ns.Layout:PushUndo(nil, nil, "Note: this undid a profile switch - only the bar layout went back, "
@@ -709,7 +740,7 @@ local function LoadProfile(key, r, quiet)
     if r.mods and ns.Modifiers then ns.Modifiers:Load(r.mods) end
     local missing, lostMacros = {}, {}
     if r.actions then missing, lostMacros = Roles:LoadActions(r.actions) end
-    Roles:EquipSet(r.gear)
+    EquipLater(r.gear)
     if not quiet then ns.Print("Switched to " .. Roles:Label(key) .. ".") end
     if #missing > 0 then
         ns.Print("Not available, slot left unchanged: " .. table.concat(missing, ", "))
