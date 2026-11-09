@@ -102,12 +102,13 @@ ry = ry - 12 -- the description takes two lines: everything below moves down
 local currentText = Label("", 16, ry - 34, "GameFontHighlight")
 currentText:SetPoint("RIGHT", panel, "RIGHT", -16, 0)
 
-local slots = {} -- 3 columns: { button, status, info, gear, key }
+local slots = {} -- up to 4 columns (a class has 3 or 4 trees): { button, status, info, gear, key }
+local COL = 145
 
 local function GearDropdown(i, x, yy)
     local dd = CreateFrame("Frame", "ZBarGearDrop" .. i, panel, "UIDropDownMenuTemplate")
     dd:SetPoint("TOPLEFT", x - 16, yy)
-    UIDropDownMenu_SetWidth(dd, 120)
+    UIDropDownMenu_SetWidth(dd, 100)
     UIDropDownMenu_Initialize(dd, function()
         local key = slots[i] and slots[i].key -- the game runs this once while the column is still being built
         local r = key and ns.Roles:Get(key)
@@ -129,10 +130,10 @@ local function GearDropdown(i, x, yy)
     return dd
 end
 
-for i = 1, 3 do
-    local x = 16 + (i - 1) * 190
+for i = 1, 4 do
+    local x = 16 + (i - 1) * COL
     local s = {}
-    s.button = Button("", 175, x, ry - 54, function()
+    s.button = Button("", COL - 6, x, ry - 54, function()
         if s.key and ns.Roles:Mode() == "coa" then
             if s.key == ns.Roles:Current() then
                 ns.Print("Already on " .. ns.Roles:Label(s.key) .. ". (Reload loads its saved bars again.)")
@@ -162,7 +163,7 @@ for i = 1, 3 do
     s.button:SetScript("OnLeave", function() GameTooltip:Hide() end)
     s.status = Label("", x, ry - 82, "GameFontDisableSmall")
     s.info = Label("", x, ry - 100, "GameFontHighlightSmall")
-    s.info:SetWidth(180)
+    s.info:SetWidth(COL - 8)
     s.info:SetSpacing(3)
     s.gearLabel = Label("Gear set:", x, ry - 152, "GameFontNormalSmall")
     s.gear = GearDropdown(i, x, ry - 164)
@@ -185,27 +186,54 @@ auto:SetScript("OnClick", function(self)
     if ns.db then ns.Roles.DB().roleAutoSave = self:GetChecked() and true or false end
 end)
 
+-- a class with four trees: which three are on the minimap button's clicks
+local clickLabel = Label("Minimap clicks:", 16, ry - 242, "GameFontNormalSmall")
+local clickDrops = {}
+local CLICK_NAMES = { "Left", "Middle", "Right" }
+for i = 1, 3 do
+    local x = 110 + (i - 1) * 165
+    local lbl = Label(CLICK_NAMES[i], x, ry - 242, "GameFontHighlightSmall")
+    local dd = CreateFrame("Frame", "ZBarClickTree" .. i, panel, "UIDropDownMenuTemplate")
+    dd:SetPoint("TOPLEFT", x + 22, ry - 234)
+    UIDropDownMenu_SetWidth(dd, 100)
+    UIDropDownMenu_Initialize(dd, function()
+        if not ns.db then return end
+        local cur = ns.Roles:ClickTrees()[i]
+        for _, e in ipairs(ns.Roles:List()) do
+            local info = UIDropDownMenu_CreateInfo()
+            info.text = e.name
+            info.checked = cur and cur.key == e.key
+            info.func = function()
+                ns.Roles:SetClickTree(i, e.key)
+                panel:refresh()
+            end
+            UIDropDownMenu_AddButton(info)
+        end
+    end)
+    clickDrops[i] = { dd = dd, label = lbl }
+end
+
 local mmHide = CreateFrame("CheckButton", "ZBarHideMinimap", panel, "InterfaceOptionsCheckButtonTemplate")
-mmHide:SetPoint("TOPLEFT", 16, ry - 234)
+mmHide:SetPoint("TOPLEFT", 16, ry - 266)
 _G[mmHide:GetName() .. "Text"]:SetText("Hide minimap button")
 mmHide:SetScript("OnClick", function(self)
     if ns.db then ns.Minimap:SetHidden(self:GetChecked()) end
 end)
 
 -- custom (server specific) bars: hide only
-Label("Custom Bars (hide only - moving and scaling stay in their own menu)", 16, ry - 268, "GameFontNormalSmall")
+Label("Custom Bars (hide only - moving and scaling stay in their own menu)", 16, ry - 300, "GameFontNormalSmall")
 -- up to 4 bars, two per row; filled in by refresh with whatever is found
 local customChecks = {}
 for i = 1, 4 do
     local cb = CreateFrame("CheckButton", "ZBarCustomHide" .. i, panel, "InterfaceOptionsCheckButtonTemplate")
-    cb:SetPoint("TOPLEFT", 16 + ((i - 1) % 2) * 300, ry - 282 - math.floor((i - 1) / 2) * 26)
+    cb:SetPoint("TOPLEFT", 16 + ((i - 1) % 2) * 300, ry - 314 - math.floor((i - 1) / 2) * 26)
     cb:SetScript("OnClick", function(self)
         if ns.db and self.barName then ns.CustomBars:SetHidden(self.barName, self:GetChecked()) end
     end)
     cb:Hide()
     customChecks[i] = cb
 end
-local customNone = Label("No custom bars found on this character.", 20, ry - 288, "GameFontDisableSmall")
+local customNone = Label("No custom bars found on this character.", 20, ry - 320, "GameFontDisableSmall")
 
 ------------------------------------------------------------------------
 function panel:refresh()
@@ -254,6 +282,18 @@ function panel:refresh()
             s.button:Hide() s.status:Hide() s.info:Hide() s.gearLabel:Hide() s.gear:Hide()
         end
     end
+    -- four trees: pick the three on the minimap clicks
+    local many = coa and #list > 3
+    local clicks = many and R:ClickTrees() or {}
+    for i, c in ipairs(clickDrops) do
+        if many then
+            UIDropDownMenu_SetText(c.dd, clicks[i] and clicks[i].name or "-")
+            c.dd:Show() c.label:Show()
+        else
+            c.dd:Hide() c.label:Hide()
+        end
+    end
+    if many then clickLabel:Show() else clickLabel:Hide() end
     local saved = cur and db.profiles[cur] and db.profiles[cur].layout
     if cur then saveRoleButton:Enable() else saveRoleButton:Disable() end
     if saved then reloadRoleButton:Enable() else reloadRoleButton:Disable() end

@@ -58,7 +58,7 @@ Azeroth and Classless realms), works on any 3.3.5a client.
 - **Factory Reset**: every bar back to its Blizzard position.
 
 **Talent tree profiles** (Conquest of Azeroth, per character)
-- One profile per talent tree of your class, shown with its kind: e.g. *Slayer - Melee*, *Infernal - Caster*, *Tyrant - Tank* (read from the game's own spec data, with primary stats, armor and difficulty).
+- One profile per talent tree of your class (three or four), shown with its kind: e.g. *Slayer - Melee*, *Infernal - Caster*, *Tyrant - Tank* (read from the game's own spec data, with primary stats, armor and difficulty).
 - Each tree keeps its own bar positions, **bar contents** (spells, macros, items, mounts), Ctrl / Shift layers, an optional **gear set** (Equipment Manager) and its **talent build**.
 - Switching asks first (**Change Talents** / **Cancel**). Talents load first through the talent window's own Import and Save Changes, then the bars, so the tree's talent spells land on them too. If the talents cannot be loaded (time-out), nothing is half switched.
 - A tree that was never saved starts empty (all its points to spend - the talent button glows); your bars stay as they are until you set them up and save.
@@ -70,7 +70,7 @@ Azeroth and Classless realms), works on any 3.3.5a client.
 - Each dual spec keeps its own bar positions, Ctrl / Shift layers and gear set, loaded when you change spec. The game swaps talents and bar contents with the spec itself.
 
 **Minimap button** (can be hidden in the options)
-- Conquest of Azeroth: left / middle / right click switches to the 1st / 2nd / 3rd talent tree; the tooltip shows which is which. Alt+right click: options. Drag: move.
+- Conquest of Azeroth: left / middle / right click switches talent tree; the tooltip shows which is which. A class with four trees picks its three in the options (*Minimap clicks*). Alt+right click: options. Drag: move.
 - Classless: click opens the options.
 
 ## Commands

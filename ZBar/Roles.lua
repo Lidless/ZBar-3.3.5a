@@ -246,9 +246,23 @@ local function Node(id)
     return nodeIndex[id]
 end
 
-local function Spec(id)
+-- the trees are a list: a tree's own id (the one the game state and build
+-- codes use, e.g. 96) is its "id" field, not its place in the list (65)
+local specById, specByIdSource
+local function SpecMap()
     local specs = _G.CoA and _G.CoA.TalentData and _G.CoA.TalentData.specs
-    return specs and specs[id]
+    if not specs then return {} end
+    if specByIdSource ~= specs then
+        specById, specByIdSource = {}, specs
+        for k, sp in pairs(specs) do
+            if type(sp) == "table" then specById[sp.id or k] = sp end
+        end
+    end
+    return specById
+end
+
+local function Spec(id)
+    return id and SpecMap()[id]
 end
 
 function Talents:SpecName(t)
@@ -526,8 +540,8 @@ function Roles:List()
     local list = {}
     if self:Mode() == "coa" then
         local cls = Talents:Current().class
-        for id, s in pairs(_G.CoA.TalentData.specs) do
-            if type(s) == "table" and s.class == cls then
+        for id, s in pairs(SpecMap()) do
+            if s.class == cls then
                 list[#list + 1] = { key = "tree" .. id, tree = id, name = s.name or ("Tree " .. id), order = s.order or id }
             end
         end
@@ -540,6 +554,39 @@ function Roles:List()
         for i = 1, 2 do list[i] = { key = "spec" .. i, name = "Spec " .. i, label = "Spec " .. i } end
     end
     return list
+end
+
+-- the trees on the minimap button's left / middle / right click: the first
+-- three, or the ones picked in the options when the class has more
+function Roles:ClickTrees()
+    local list = self:List()
+    local picked = ns.db and DB().clickTrees or {}
+    local out, used = {}, {}
+    for i = 1, 3 do
+        local e = picked[i] and self:Entry(picked[i])
+        if e and not used[e.key] then out[i], used[e.key] = e, true end
+    end
+    -- empty clicks get the remaining trees in their order
+    for i = 1, 3 do
+        if not out[i] then
+            for _, e in ipairs(list) do
+                if not used[e.key] then out[i], used[e.key] = e, true break end
+            end
+        end
+    end
+    return out
+end
+
+function Roles:SetClickTree(i, key)
+    local db = DB()
+    db.clickTrees = db.clickTrees or {}
+    local cur = self:ClickTrees()
+    -- picking a tree already on another click swaps the two
+    for j = 1, 3 do
+        if j ~= i and cur[j] and cur[j].key == key then db.clickTrees[j] = cur[i] and cur[i].key end
+    end
+    db.clickTrees[i] = key
+    Refresh()
 end
 
 function Roles:Entry(key)

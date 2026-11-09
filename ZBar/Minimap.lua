@@ -1,6 +1,7 @@
 -- ZBar minimap button
 -- Conquest of Azeroth (talent trees):
---   Left / middle / right click : the 1st / 2nd / 3rd talent tree of the class
+--   Left / middle / right click : three talent trees of the class (a class
+--                                 with four trees: picked in the options)
 --   Alt+right click             : open the ZBar options
 -- Classless realm (no talent trees): any click opens the options.
 --   Drag                        : move the button around the minimap
@@ -48,12 +49,18 @@ local function ShowTooltip(self)
     local cur = R:Current()
     if R:Mode() == "coa" then
         GameTooltip:AddLine(" ")
-        for i, e in ipairs(R:List()) do
-            if i > 3 then break end
-            local saved = R:Get(e.key)
-            GameTooltip:AddDoubleLine("|cffeda55f" .. CLICK_NAME[i] .. ":|r " .. e.label
-                .. (e.key == cur and "  |cff8af559(now)|r" or ""),
-                (saved and saved.layout) and "" or "|cffff6060not saved yet|r", 0.9, 0.9, 0.9)
+        local clicks = R:ClickTrees()
+        for i = 1, 3 do
+            local e = clicks[i]
+            if e then
+                local saved = R:Get(e.key)
+                GameTooltip:AddDoubleLine("|cffeda55f" .. CLICK_NAME[i] .. ":|r " .. e.label
+                    .. (e.key == cur and "  |cff8af559(now)|r" or ""),
+                    (saved and saved.layout) and "" or "|cffff6060not saved yet|r", 0.9, 0.9, 0.9)
+            end
+        end
+        if #R:List() > 3 then
+            GameTooltip:AddLine("(which trees are on the clicks: ZBar options)", 0.6, 0.6, 0.6)
         end
         GameTooltip:AddLine("|cffeda55fAlt+right click:|r ZBar options", 0.8, 0.8, 0.8)
     else
@@ -136,7 +143,7 @@ function MM:Create()
             OpenOptions()
             return
         end
-        local e = R:List()[CLICK_INDEX[mouse] or 0]
+        local e = R:ClickTrees()[CLICK_INDEX[mouse] or 0]
         if not e then return end
         if e.key == R:Current() then
             -- a stray click must not throw away unsaved bar changes
