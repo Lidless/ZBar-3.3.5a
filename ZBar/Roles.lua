@@ -270,13 +270,31 @@ function Talents:SpecName(t)
     return s and s.name or ("Spec " .. tostring(t.spec))
 end
 
+-- talents the game gives for free and that cannot be imported (the tree's
+-- passive): the tree's passive node, any node that costs no points, a node
+-- that teaches the tree's passive spell, or a node the talent data does not
+-- know (the built-in data can be older than the game's - e.g. Infernal's
+-- passive is 11224 in the game but 4008 in the data)
+local function IsFree(specId, id)
+    local s = Spec(specId)
+    if s and id == s.passiveNode then return true end
+    local n = Node(id)
+    if not n then return true end
+    if (n.classCost or 0) == 0 and (n.specCost or 0) == 0 then return true end
+    if s and s.passive and type(n.spells) == "table" then
+        for _, sp in pairs(n.spells) do
+            if sp == s.passive or (type(sp) == "table" and (sp.id == s.passive or sp[1] == s.passive)) then return true end
+        end
+    end
+    return false
+end
+Talents.IsFree = IsFree
+
 -- points spent in the class tree and the spec tree (the spec's free passive not counted)
 function Talents:Points(t)
-    local s = Spec(t.spec)
-    local passive = s and s.passiveNode
     local cp, sp = 0, 0
     for id, r in pairs(t.ranks) do
-        if id ~= passive then
+        if not IsFree(t.spec, id) then
             local n = Node(id)
             if n then
                 cp = cp + r * (n.classCost or 0)
@@ -296,10 +314,8 @@ end
 -- talent names (with ranks) for tooltips
 function Talents:Names(t)
     local list = {}
-    local s = Spec(t.spec)
-    local passive = s and s.passiveNode
     for id, r in pairs(t.ranks) do
-        if id ~= passive then
+        if not IsFree(t.spec, id) then
             local n = Node(id)
             local name = n and n.name or ("#" .. tostring(id))
             if n and n.max and n.max > 1 then name = name .. " " .. r .. "/" .. n.max end
@@ -314,20 +330,16 @@ end
 -- the game grants it by itself and it is not part of the build code)
 function Talents:Same(a, b)
     if not a or not b or a.spec ~= b.spec then return false end
-    local s = Spec(a.spec)
-    local passive = s and s.passiveNode
-    for id, r in pairs(a.ranks) do if id ~= passive and b.ranks[id] ~= r then return false end end
-    for id, r in pairs(b.ranks) do if id ~= passive and a.ranks[id] ~= r then return false end end
+    for id, r in pairs(a.ranks) do if not IsFree(a.spec, id) and b.ranks[id] ~= r then return false end end
+    for id, r in pairs(b.ranks) do if not IsFree(a.spec, id) and a.ranks[id] ~= r then return false end end
     return true
 end
 
 -- the same code the game's Share Build window shows
 function Talents:Code(t)
-    local s = Spec(t.spec)
-    local passive = s and s.passiveNode
     local parts = {}
     for id, r in pairs(t.ranks) do
-        if id ~= passive then parts[#parts + 1] = tostring(id) .. "=" .. tostring(r) end
+        if not IsFree(t.spec, id) then parts[#parts + 1] = tostring(id) .. "=" .. tostring(r) end
     end
     table.sort(parts)
     return string.format("CoA:%s:%s:%s:%s", tostring(t.version), tostring(t.class), tostring(t.spec),
@@ -354,15 +366,13 @@ local function Diff(now, want)
     if not (now and want) then return "no data" end
     local d = {}
     if now.spec ~= want.spec then d[#d + 1] = "tree " .. tostring(now.spec) .. "~=" .. tostring(want.spec) end
-    local s = Spec(want.spec)
-    local passive = s and s.passiveNode
     local seen = {}
     for id, r in pairs(want.ranks) do
         seen[id] = true
-        if id ~= passive and (now.ranks[id] or 0) ~= r then d[#d + 1] = id .. ":" .. (now.ranks[id] or 0) .. "~=" .. r end
+        if not IsFree(want.spec, id) and (now.ranks[id] or 0) ~= r then d[#d + 1] = id .. ":" .. (now.ranks[id] or 0) .. "~=" .. r end
     end
     for id, r in pairs(now.ranks) do
-        if not seen[id] and id ~= passive then d[#d + 1] = id .. ":" .. r .. " extra" end
+        if not seen[id] and not IsFree(want.spec, id) then d[#d + 1] = id .. ":" .. r .. " extra" end
     end
     return #d > 0 and table.concat(d, " ") or "same"
 end
