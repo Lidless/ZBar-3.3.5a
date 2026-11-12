@@ -61,6 +61,7 @@ Azeroth and Classless realms), works on any 3.3.5a client.
 - One profile per talent tree of your class (three or four), shown with its kind: e.g. *Slayer - Melee*, *Infernal - Caster*, *Tyrant - Tank* (read from the game's own spec data, with primary stats, armor and difficulty).
 - Each tree keeps its own bar positions, **bar contents** (spells, macros, items, mounts), Ctrl / Shift layers, an optional **gear set** (Equipment Manager) and its **talent build**.
 - Switching asks first (**Change Talents** / **Cancel**). Talents load first through the talent window's own Import and Save Changes, then the bars, so the tree's talent spells land on them too. If the talents cannot be loaded (time-out), nothing is half switched.
+- Below level 10 (no talent trees yet) the trees show *Talent trees open at level 10* - the character is still known as a Conquest of Azeroth character, not a classless one.
 - A tree that was never saved starts empty (all its points to spend - the talent button glows); your bars stay as they are until you set them up and save.
 - Switched trees in the game's own talent window? ZBar follows: the old tree's bars are saved, the new tree's bars loaded.
 - Auto-save when switching refreshes trees that were saved before.

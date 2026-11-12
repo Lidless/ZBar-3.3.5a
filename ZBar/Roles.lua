@@ -538,12 +538,22 @@ local function Presentation(id)
 end
 
 -- "coa": the character has Conquest of Azeroth talent trees; "spec": dual spec only
+-- A Conquest of Azeroth character is known by its CoA class, also before its
+-- talent trees open (level 10: no tree yet, spec 0). The classless realm has
+-- CoA turned off and no CoA class.
 function Roles:Mode()
     local t = Talents:Available() and Talents:Current()
-    local s = t and Spec(t.spec)
-    if s and s.class == t.class then return "coa" end
+    if t and tonumber(t.class) and t.class ~= 0 then return "coa" end
     return "spec"
 end
+
+-- CoA character whose talent trees are not open yet (below level 10)
+function Roles:TreesLocked()
+    if self:Mode() ~= "coa" then return false end
+    local t = Talents:Current()
+    return not (t and Spec(t.spec))
+end
+Roles.LOCKED_TEXT = "Talent trees open at level 10."
 
 -- the profiles of this character, in order: { key, name, label, tree }
 function Roles:List()
@@ -660,6 +670,7 @@ end
 function Roles:Current()
     if not ns.db then return nil end
     if self:Mode() == "coa" then
+        if self:TreesLocked() then return nil end -- no tree yet: no profile
         return "tree" .. Talents:Current().spec
     end
     return "spec" .. (GetActiveTalentGroup and GetActiveTalentGroup() or 1)
@@ -672,7 +683,10 @@ end
 -- spells from the bars, so slots that are empty now keep what was saved before.
 function Roles:Save(key, quiet, merge)
     key = key or self:Current()
-    if not key then return end
+    if not key then
+        if self:TreesLocked() then ns.Print(self.LOCKED_TEXT) end
+        return
+    end
     if InCombatLockdown() then ns.Print("Cannot save in combat.") return end
     local db = DB()
     local r = db.profiles[key] or {}
@@ -751,6 +765,7 @@ end
 
 -- load the active profile's layout and bars again (and its talents, if they differ)
 function Roles:Reload()
+    if self:TreesLocked() then ns.Print(self.LOCKED_TEXT) return end
     self:Switch(self:Current())
 end
 
@@ -762,6 +777,7 @@ function Roles:Switch(key)
         ns.Print("No talent trees on this character: profiles follow the dual spec.")
         return
     end
+    if self:TreesLocked() then ns.Print(self.LOCKED_TEXT) return end
     local e = self:Entry(key)
     if not e then ns.Print("Unknown talent tree.") return end
     local r = self:Get(key)
@@ -927,7 +943,8 @@ end
 -- (all points earned) minus the points spent there.
 ------------------------------------------------------------------------
 function Talents:Unspent()
-    if not self:Available() then return nil end
+    if not self:Available() or (UnitLevel("player") or 0) < 10 then return nil end
+    if Roles:TreesLocked() then return nil end
     local ok, st = pcall(_G.Ex_GetCoATalentState)
     local cur = self:Current()
     if not ok or type(st) ~= "table" or not cur then return nil end
