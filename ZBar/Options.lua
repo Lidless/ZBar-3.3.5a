@@ -261,8 +261,13 @@ function panel:refresh()
             free = "   |cff8af559" .. table.concat(parts, " / ") .. " to spend|r"
         end
     end
-    currentText:SetText("Now: " .. R:Label(cur)
-        .. (nowT and ("   |cffaaaaaaTalents: " .. T:Summary(nowT) .. "|r") or "") .. free)
+    local locked = R:TreesLocked()
+    if locked then
+        currentText:SetText("|cffffd100" .. R.LOCKED_TEXT .. "|r")
+    else
+        currentText:SetText("Now: " .. R:Label(cur)
+            .. (nowT and ("   |cffaaaaaaTalents: " .. T:Summary(nowT) .. "|r") or "") .. free)
+    end
     mmHide:SetChecked(ns.Minimap:IsHidden())
     local list = R:List()
     for i, s in ipairs(slots) do
@@ -276,8 +281,9 @@ function panel:refresh()
             s.info:SetText(e.tree and (R:TreeInfo(e.tree) or "") or "")
             UIDropDownMenu_SetText(s.gear, (r and r.gear) or "No gear change")
             s.status:Show() s.info:Show() s.gearLabel:Show() s.gear:Show()
-            -- dual spec profiles switch with the game's spec, not here
-            if coa then s.button:Enable() else s.button:Disable() end
+            -- dual spec profiles switch with the game's spec, not here; trees
+            -- open at level 10
+            if coa and not locked then s.button:Enable() else s.button:Disable() end
         else
             s.button:Hide() s.status:Hide() s.info:Hide() s.gearLabel:Hide() s.gear:Hide()
         end
@@ -297,8 +303,8 @@ function panel:refresh()
     local saved = cur and db.profiles[cur] and db.profiles[cur].layout
     if cur then saveRoleButton:Enable() else saveRoleButton:Disable() end
     if saved then reloadRoleButton:Enable() else reloadRoleButton:Disable() end
-    saveRoleButton:SetText("Save " .. R:Label(cur))
-    reloadRoleButton:SetText("Reload " .. ((R:Entry(cur) or {}).name or ""))
+    saveRoleButton:SetText(cur and ("Save " .. R:Label(cur)) or "Save")
+    reloadRoleButton:SetText("Reload " .. ((cur and R:Entry(cur) or {}).name or ""))
     auto:SetChecked(db.roleAutoSave)
     local bars = ns.CustomBars:OptionList()
     for i, cb in ipairs(customChecks) do

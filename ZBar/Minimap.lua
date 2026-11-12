@@ -47,7 +47,11 @@ local function ShowTooltip(self)
     GameTooltip:AddLine("ZBar")
     local R = ns.Roles
     local cur = R:Current()
-    if R:Mode() == "coa" then
+    if R:Mode() == "coa" and R:TreesLocked() then
+        GameTooltip:AddLine(R.LOCKED_TEXT, 1, 0.82, 0)
+        GameTooltip:AddLine(" ")
+        GameTooltip:AddLine("|cffeda55fAlt+right click:|r ZBar options", 0.8, 0.8, 0.8)
+    elseif R:Mode() == "coa" then
         GameTooltip:AddLine(" ")
         local clicks = R:ClickTrees()
         for i = 1, 3 do
@@ -143,6 +147,7 @@ function MM:Create()
             OpenOptions()
             return
         end
+        if R:TreesLocked() then ns.Print(R.LOCKED_TEXT) return end
         local e = R:ClickTrees()[CLICK_INDEX[mouse] or 0]
         if not e then return end
         if e.key == R:Current() then
